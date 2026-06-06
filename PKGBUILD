@@ -132,7 +132,6 @@ package() {
     -e '/^-Dwsl/d' \
     "$_mac/bin/devecostudio.vmoptions" > "$_pkg/bin/devecostudio64-lin.vmoptions"
   cat >> "$_pkg/bin/devecostudio64-lin.vmoptions" << 'VMEOF'
---enable-native-access=ALL-UNNAMED
 -Dawt.lock.fair=true
 -Dsun.tools.attach.tmp.only=true
 -Dglfw.im.module=fcitx
@@ -219,7 +218,7 @@ SHEOF
   find "$_pkg/jbr" -type f -executable -exec strip --strip-all {} \; 2>/dev/null || true
   strip --strip-all "$_pkg/bin/devecostudio" 2>/dev/null || true
   find "$_pkg/lib" -name '*.so' -exec strip --strip-unneeded {} \; 2>/dev/null || true
-  find "$_pkg/bin/fsnotifier" -exec strip --strip-all {} \; 2>/dev/null || true
+  strip --strip-all "$_pkg/bin/fsnotifier" 2>/dev/null || true
 
   msg2 "Fixing permissions (Mac DMG files have 700)..."
   # Mac DMG preserves 700 permissions via cp -a; fix for world-readability

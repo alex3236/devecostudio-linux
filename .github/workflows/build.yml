@@ -4,42 +4,57 @@ on:
   workflow_dispatch:
     inputs:
       mac_zip_url:
-        description: 'URL to devecostudio-mac-6.1.1.280.zip'
+        description: URL to devecostudio-mac-6.1.1.280.zip
         required: true
       cli_zip_url:
-        description: 'URL to commandline-tools-linux-x64-6.1.1.280.zip'
+        description: URL to commandline-tools-linux-x64-6.1.1.280.zip
         required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     container:
-      image: archlinux:latest
+      image: archlinux:base-devel
+
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          path: devecostudio
+
       - name: Install dependencies
         run: |
-          pacman -Syu --noconfirm base-devel jq p7zip sudo
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm \
+            git \
+            jq \
+            p7zip
 
       - name: Create build user
         run: |
           useradd -m builder
-          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
-      - uses: actions/checkout@v4
-        with:
-          path: devecostudio
+          chown -R builder:builder devecostudio
 
       - name: Download source archives
         working-directory: devecostudio
         run: |
-          curl -L -o devecostudio-mac-6.1.1.280.zip "${{ inputs.mac_zip_url }}"
-          curl -L -o commandline-tools-linux-x64-6.1.1.280.zip "${{ inputs.cli_zip_url }}"
+          curl -fL \
+            -o devecostudio-mac-6.1.1.280.zip \
+            "${{ inputs.mac_zip_url }}" &
+
+          curl -fL \
+            -o commandline-tools-linux-x64-6.1.1.280.zip \
+            "${{ inputs.cli_zip_url }}" &
+
+          wait
 
       - name: Build package
-        working-directory: devecostudio
         run: |
-          chown -R builder:builder .
-          su builder -c 'makepkg --syncdeps --noconfirm'
+          runuser -u builder -- bash -c '
+            cd devecostudio
+            makepkg -sfc --noconfirm
+          '
 
       - name: Upload package
         uses: actions/upload-artifact@v4
