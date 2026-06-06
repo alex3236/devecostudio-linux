@@ -31,6 +31,10 @@ To use a different version:
 Only the versions in `pkgver` have been
 tested — if you modify them, test the result yourself.
 
+## Known limitations
+
+- **Emulator** — The macOS emulator binary is not portable. There is an OpenHarmony emulator from the [Oniro project](https://docs.oniroproject.org/device-development/developer-boards/emulator), but it cannot replace the HarmonyOS emulator.
+
 ## What happens under the hood
 
 The PKGBUILD extracts the Mac DMG and takes the platform-independent parts — JARs, plugins, modules, tools (hvigor, ohpm, etc.). Then it replaces the macOS-specific bits (launcher, JBR, native libraries) with their Linux counterparts from IntelliJ IDEA. The vmoptions and product-info.json are transformed on the fly so the IDE knows it's running on Linux.
