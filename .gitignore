@@ -1,0 +1,11 @@
+# Built package
+*.pkg.tar.zst
+
+# Build artifacts
+src/
+pkg/
+*.log
+
+# Manually downloaded sources (must be provided by user)
+*.zip
+idea-*.tar.gz
