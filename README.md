@@ -8,6 +8,8 @@ It is not an official package. It is not endorsed by Huawei or JetBrains.
 
 ## How to build
 
+Always check `PKGBUILD` yourself.
+
 You will need to manually download two files from Huawei's website:
 
 1. **DevEco Studio ${pkgver} for Mac**
@@ -19,19 +21,15 @@ Place both `.zip` files next to the PKGBUILD. Then:
 
 The IntelliJ IDEA tarball is fetched automatically from JetBrains' CDN.
 
-> The version in `pkgver` and its SHA256 checksums are what the author tested.
-> To use a different version:
->
-> 1. Check the PKGBUILD for the expected filenames and checksums.
-> 2. Download the version you want (DevEco Studio for Mac, Command Line Tools
->    for Linux), or decide on your own combination.
-> 3. Update `pkgver` and the two SHA256 checksums in the PKGBUILD.
->    If you don't want to compute checksums, set them to `"SKIP"`.
-> 4. Optionally update `_ideaver` if you want a different IntelliJ IDEA base.
->    The IDEA tarball is auto-downloaded from JetBrains' CDN.
->
-> Be aware that only the versions in `pkgver` have been tested.
-> If you modify them, test the result yourself.
+The version in `pkgver` and its SHA256 checksums are what the author tested.
+To use a different version:
+- Check the PKGBUILD for the expected filenames,
+- Download the version you want, then update `pkgver` and the two SHA256 checksums (or `"SKIP"` if you'd rather skip verification). 
+- You can also change
+`_ideaver` for a different IDEA base.
+
+Only the versions in `pkgver` have been
+tested — if you modify them, test the result yourself.
 
 ## What happens under the hood
 
