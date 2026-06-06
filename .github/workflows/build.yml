@@ -29,11 +29,13 @@ jobs:
           pacman -S --needed --noconfirm \
             git \
             jq \
-            p7zip
+            p7zip \
+            sudo
 
       - name: Create build user
         run: |
           useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder devecostudio
 
       - name: Download source archives
