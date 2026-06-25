@@ -15,7 +15,7 @@
 pkgname=devecostudio
 pkgver=6.1.1.280
 _ideaver=2026.1.3
-pkgrel=2
+pkgrel=3
 install='devecostudio.install'
 arch=('x86_64')
 url='https://developer.huawei.com/consumer/cn/deveco-studio/'
@@ -177,7 +177,7 @@ VMEOF
   cat > "$_pkg/bin/devecostudio.sh" << 'SHEOF'
 #!/bin/bash
 export _JAVA_AWT_WM_NONREPARENTING=1
-exec "$(dirname "$0")/devecostudio" "$@"
+exec "$(dirname "$(readlink -f "$0")")/devecostudio" "$@"
 SHEOF
   chmod +x "$_pkg/bin/devecostudio.sh"
 
