@@ -4,11 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       mac_zip_url:
-        description: URL to devecostudio-mac-6.1.1.280.zip
+        description: URL to the Mac zip (devecostudio-mac-<ver>.zip)
         required: true
       cli_zip_url:
-        description: URL to commandline-tools-linux-x64-6.1.1.280.zip
+        description: URL to commandline-tools-linux-x64-<ver>.zip
         required: true
+      pkgver:
+        description: 'Override pkgver (e.g. 6.1.1.280). Leave empty to use the value in PKGBUILD.'
+        required: false
+        default: ''
+      mac_zip_sha256:
+        description: 'SHA256 of the Mac zip. Leave empty to use the value in PKGBUILD.'
+        required: false
+        default: ''
+      cli_zip_sha256:
+        description: 'SHA256 of the commandline-tools zip. Leave empty to use the value in PKGBUILD.'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -38,15 +50,33 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder devecostudio
 
+      - name: Apply version and checksum overrides
+        working-directory: devecostudio
+        run: |
+          if [[ -n "${{ inputs.pkgver }}" ]]; then
+            sed -i "s/^pkgver=.*/pkgver=${{ inputs.pkgver }}/" PKGBUILD
+            echo "pkgver overridden to ${{ inputs.pkgver }}"
+          fi
+          # sha256sums array line numbers: mac zip is the 1st entry, cli zip the 2nd
+          line=$(grep -n "^sha256sums=(" PKGBUILD | cut -d: -f1)
+          if [[ -n "${{ inputs.mac_zip_sha256 }}" ]]; then
+            sed -i "$((line+1))s|.*|  '${{ inputs.mac_zip_sha256 }}'|" PKGBUILD
+            echo "mac zip sha256 overridden"
+          fi
+          if [[ -n "${{ inputs.cli_zip_sha256 }}" ]]; then
+            sed -i "$((line+2))s|.*|  '${{ inputs.cli_zip_sha256 }}'|" PKGBUILD
+            echo "cli zip sha256 overridden"
+          fi
+
       - name: Download source archives
         working-directory: devecostudio
         run: |
           curl -fL \
-            -o devecostudio-mac-6.1.1.280.zip \
+            -o devecostudio-mac.zip \
             "${{ inputs.mac_zip_url }}" &
 
           curl -fL \
-            -o commandline-tools-linux-x64-6.1.1.280.zip \
+            -o commandline-tools-linux-x64.zip \
             "${{ inputs.cli_zip_url }}" &
 
           wait

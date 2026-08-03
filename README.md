@@ -15,7 +15,10 @@ You will need to manually download two files from Huawei's website:
 1. **DevEco Studio ${pkgver} for Mac**
 2. **Command Line Tools for Linux (x86_64) ${pkgver}**
 
-Place both `.zip` files next to the PKGBUILD. Then:
+Place both `.zip` files next to the PKGBUILD, **renamed** to the fixed
+filenames the PKGBUILD expects — `devecostudio-mac.zip` and
+`commandline-tools-linux-x64.zip` (the names are version-independent).
+Then:
 
     makepkg -si
 
@@ -23,13 +26,17 @@ The IntelliJ IDEA tarball is fetched automatically from JetBrains' CDN.
 
 The version in `pkgver` and its SHA256 checksums are what the author tested.
 To use a different version:
-- Check the PKGBUILD for the expected filenames,
-- Download the version you want, then update `pkgver` and the two SHA256 checksums (or `"SKIP"` if you'd rather skip verification). 
-- You can also change
-`_ideaver` for a different IDEA base.
 
-Only the versions in `pkgver` have been
-tested — if you modify them, test the result yourself.
+1. Check the PKGBUILD for the expected filenames (they don't contain a version, so you only rename your downloads once),
+2. Download the version you want, rename it to the fixed filenames, then update `pkgver` and the two SHA256 checksums (or set them to `"SKIP"` if you'd rather skip verification),
+3. You can also change `_ideaver` for a different IDEA base.
+
+Only the versions in `pkgver` have been tested — if you modify them, test
+the result yourself.
+
+When building via the GitHub Actions workflow, you can supply a `pkgver`
+and SHA256 checksums for the two Huawei downloads; leave any of them empty
+to keep the values already in the PKGBUILD.
 
 ## Known limitations
 

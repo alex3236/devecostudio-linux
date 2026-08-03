@@ -2,14 +2,15 @@
 # Contributor: alex3236
 #
 # === Manual downloads (place in same directory as PKGBUILD) ===
-# Both files must match the version in pkgver. The SHA256 checksums below
-# are for the expected versions; if you use a different version, change the
-# checksums to "SKIP" and update pkgver.
+# Both files must be renamed to the fixed names below (the filenames are
+# version-independent, so only pkgver and the checksums change on upgrade).
+# If you use a different version, update pkgver and the SHA256 checksums
+# (or set them to "SKIP" to skip verification).
 #
-# 1. devecostudio-mac-${pkgver}.zip — Mac (X86 or ARM, either works)
+# 1. devecostudio-mac.zip — Mac (X86 or ARM, either works)
 #    Download from: https://developer.huawei.com/consumer/cn/deveco-studio/
 #
-# 2. commandline-tools-linux-x64-${pkgver}.zip — Command Line Tools for Linux
+# 2. commandline-tools-linux-x64.zip — Command Line Tools for Linux
 #    Download from same page
 
 pkgname=devecostudio
@@ -34,8 +35,8 @@ optdepends=(
 makedepends=('jq' 'p7zip')
 options=('!strip')
 source=(
-  "devecostudio-mac-${pkgver}.zip"
-  "commandline-tools-linux-x64-${pkgver}.zip"
+  "devecostudio-mac.zip"
+  "commandline-tools-linux-x64.zip"
   "idea-${_ideaver}.tar.gz::https://download.jetbrains.com/idea/idea-${_ideaver}.tar.gz"
   "devecostudio.desktop"
 )
