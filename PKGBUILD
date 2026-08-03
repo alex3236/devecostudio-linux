@@ -15,7 +15,7 @@
 pkgname=devecostudio
 pkgver=6.1.1.280
 _ideaver=2026.1.3
-pkgrel=3
+pkgrel=4
 install='devecostudio.install'
 arch=('x86_64')
 url='https://developer.huawei.com/consumer/cn/deveco-studio/'
@@ -224,11 +224,10 @@ SHEOF
   # Mac DMG preserves 700 permissions via cp -a; fix for world-readability
   find "$_pkg" -type d -exec chmod 755 {} \;
   find "$_pkg" -type f -exec chmod 644 {} \;
-  # Restore executability for binaries
-  chmod +x "$_pkg"/bin/* 2>/dev/null || true
-  find "$_pkg/jbr" -type f \( -name '*.so' -o -path '*/bin/*' \) -exec chmod +x {} \; 2>/dev/null || true
-  find "$_pkg/lib" -name '*.so' -exec chmod +x {} \; 2>/dev/null || true
-  find "$_pkg/tools" -type f \( -name 'node' -o -name 'npm' -o -name 'npx' -o -name 'ohpm' -o -name 'hvigor' \) -exec chmod +x {} \; 2>/dev/null || true
+  # Restore executability for all ELF binaries (incl. jbr/lib/{jspawnhelper,cef_server,...})
+  find "$_pkg" -type f -exec file {} + | grep -E ': .*ELF' | cut -d: -f1 | xargs -r chmod +x
+  # ...and for shebang scripts
+  find "$_pkg" -type f -exec sh -c 'head -c 2 "$1" | grep -q "^#!" && chmod +x "$1"' _ {} \;
 
   msg2 "Cleaning platform cruft..."
   find "$_pkg" -name '*.exe' -delete
