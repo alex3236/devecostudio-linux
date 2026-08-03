@@ -31,7 +31,23 @@ IntelliJ IDEA 的 tarball 会自动从 JetBrains CDN 下载。
 
 只有 `pkgver` 中的版本经过测试——如果你做了修改，请自行测试结果。
 
-如果通过 GitHub Actions 工作流构建，可以提供 `pkgver` 和两个华为下载文件的 SHA256 校验值；其中任何一项留空则使用 PKGBUILD 中已有的值。
+## 使用 GitHub Actions 构建
+
+如果你手边没有 Arch 机器，也可以用 GitHub Actions 跑同样的构建：
+
+1. **Fork** 本仓库（该工作流需要手动触发），或使用你自己的 fork。
+2. 打开 **Actions** 标签页，选择 **Build DevEco Studio PKGBUILD** 工作流，点击 **Run workflow**。
+3. 填写两个下载 URL（华为的链接会过期，每次构建都需要从[下载页](https://developer.huawei.com/consumer/cn/deveco-studio/)获取新链接）：
+   - `mac_zip_url` — Mac zip 的 URL
+   - `cli_zip_url` — Linux Command Line Tools zip 的 URL
+4. 可选地覆盖版本号和校验值（留空则使用 `PKGBUILD` 中的值）：
+   - `pkgver` — 例如 `6.1.1.280`
+   - `mac_zip_sha256` / `cli_zip_sha256` — 两个 zip 的 SHA256；未测试过的版本可用 `SKIP` 跳过校验
+5. 运行结束后，从运行页面下载 `devecostudio-pkg` artifact，并在本地安装：
+
+       sudo pacman -U devecostudio-*.pkg.tar.zst
+
+GitHub 账户在公共仓库上可以免费使用 Actions。
 
 ## 已知限制
 

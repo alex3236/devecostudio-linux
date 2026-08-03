@@ -36,9 +36,24 @@ To use a different version:
 Only the versions in `pkgver` have been tested — if you modify them, test
 the result yourself.
 
-When building via the GitHub Actions workflow, you can supply a `pkgver`
-and SHA256 checksums for the two Huawei downloads; leave any of them empty
-to keep the values already in the PKGBUILD.
+## Building with GitHub Actions
+
+If you don't have an Arch machine at hand, the same build can be run in
+GitHub Actions:
+
+1. **Fork** this repository (the workflow is triggered manually), or use your own fork of it.
+2. Open the **Actions** tab, select the **Build DevEco Studio PKGBUILD** workflow and click **Run workflow**.
+3. Fill in the two download URLs (Huawei links expire, so you need fresh ones from the [download page](https://developer.huawei.com/consumer/cn/deveco-studio/) each time):
+   - `mac_zip_url` — URL of the Mac zip
+   - `cli_zip_url` — URL of the Linux Command Line Tools zip
+4. Optionally override the version and checksums (leave empty to keep the values in `PKGBUILD`):
+   - `pkgver` — e.g. `6.1.1.280`
+   - `mac_zip_sha256` / `cli_zip_sha256` — SHA256 of the two zips; use `SKIP` to skip verification for an untested version
+5. When the run finishes, download the `devecostudio-pkg` artifact from the run page and install it locally:
+
+       sudo pacman -U devecostudio-*.pkg.tar.zst
+
+A GitHub account can use Actions for free on public repositories.
 
 ## Known limitations
 
