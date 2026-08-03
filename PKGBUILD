@@ -14,9 +14,9 @@
 #    Download from same page
 
 pkgname=devecostudio
-pkgver=6.1.1.280
+pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=4
+pkgrel=1
 install='devecostudio.install'
 arch=('x86_64')
 url='https://developer.huawei.com/consumer/cn/deveco-studio/'
@@ -41,8 +41,8 @@ source=(
   "devecostudio.desktop"
 )
 sha256sums=(
-  'ff91d2c51e4887be279eb08eeda1d9094382a4869673c3666db7c663d1611925'
-  'b9caf7b73c541b90e6c8f3c7c3de7f2bea9b35e41e80cd3525f2f759ebf16cf4'
+  '5d67a2cfdd7b984a9c9f64e5abc6e082c5e3bc958833a92a55370cc623799ce1'
+  '0cea7ad6cc1af98ac701b9c61b7c9aae2d0f2104749a80ae84c1f6ca0fc17555'
   'a6f049716da1d09d9e0ec1500c60bf01a5ff8a0fe2419178dd1ff2fdb2b77563'
   'b530705424c7fdd61c3eaa477d6c79643e5d9d0cf7ecadc8f6e96559b7c6dc2d'
 )
@@ -60,6 +60,10 @@ prepare() {
     -x!'DevEco-Studio/DevEco-Studio.app/Contents/sdk/default' \
     -x!'DevEco-Studio/DevEco-Studio.app/Contents/jbr' \
     -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/emulator' \
+    -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/dumpParser' \
+    -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/llvm' \
+    -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/profiler' \
+    -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/node' \
     2>&1 | grep -v "^\s*$" | grep -v "Sub items Errors" | tail -3
   _mac="$srcdir/mac_dmg/DevEco-Studio/DevEco-Studio.app/Contents"
   if [[ ! -d "$_mac/plugins" || ! -f "$_mac/Resources/product-info.json" ]]; then
@@ -91,15 +95,12 @@ package() {
   local _pkg="$pkgdir/opt/devecostudio"
 
   msg2 "Creating directory skeleton..."
-  mkdir -p "$_pkg"/{bin,jbr,lib,plugins,modules,tools/hvigor,tools/ohpm,tools/UxTestService,license,sdk}
+  mkdir -p "$_pkg"/{bin,jbr,lib,plugins,modules,tools,license,sdk}
 
   msg2 "Copying cross-platform files from Mac DMG..."
 
-  # lib/*.jar
+  # lib/*.jar (26.0.0+ flattens all platform jars into lib/)
   cp -a "$_mac/lib/"*.jar "$_pkg/lib/"
-  # Also copy lib/modules/ and lib/cds/ (needed for module descriptor resolution)
-  cp -a "$_mac/lib/modules" "$_pkg/lib/"
-  cp -a "$_mac/lib/cds" "$_pkg/lib/"
 
   # plugins (minus ohos-trace which has the lemon bug)
   # Use * glob to avoid nested plugins/plugins/ directory
@@ -109,9 +110,19 @@ package() {
   # modules
   cp -a "$_mac/modules/"* "$_pkg/modules/"
 
-  # tools (cross-platform: hvigor = JS, ohpm = JS, UxTestService = Python)
-  cp -a "$_mac/tools/hvigor/"* "$_pkg/tools/hvigor/"
-  cp -a "$_mac/tools/ohpm/"* "$_pkg/tools/ohpm/"
+  # tools: prefer CLI (Linux) versions where available; UxTestService is
+  # Mac-only (Python, cross-platform) and stays from the DMG.
+  # hvigor/ohpm/hstack/codelinter/emulator/node from CLI tools
+  cp -a "$_cli/hvigor/" "$_pkg/tools/hvigor"
+  cp -a "$_cli/ohpm/" "$_pkg/tools/ohpm"
+  cp -a "$_cli/hstack/" "$_pkg/tools/hstack"
+  cp -a "$_cli/codelinter/" "$_pkg/tools/codelinter"
+  cp -a "$_cli/emulator/" "$_pkg/tools/emulator"
+  cp -a "$_cli/tool/node/" "$_pkg/tools/node/"
+  # symlink bin/* to tools/node (IDE expects node/npm/npx/corepack alongside bin/)
+  ln -sf bin/* "$_pkg/tools/node/"
+  # UxTestService from Mac DMG (Python, cross-platform)
+  mkdir -p "$_pkg/tools/UxTestService"
   cp -a "$_mac/tools/UxTestService/"* "$_pkg/tools/UxTestService/"
 
   # license
@@ -152,23 +163,29 @@ VMEOF
   cp -a "$_idea/bin/fsnotifier" "$_pkg/bin/"
 
   # native libs
-  rm -rf "$_pkg/lib/native" "$_pkg/lib/pty4j" "$_pkg/lib/jna"
-  mkdir -p "$_pkg/lib/native/linux-x86_64" "$_pkg/lib/pty4j/linux" "$_pkg/lib/jna/amd64"
+  rm -rf "$_pkg/lib/native" "$_pkg/lib/pty4j" "$_pkg/lib/jna" "$_pkg/lib/skiko-awt-runtime-all"
+  mkdir -p "$_pkg/lib/native/linux-x86_64" "$_pkg/lib/pty4j/linux" "$_pkg/lib/jna/amd64" "$_pkg/lib/skiko-awt-runtime-all"
   cp -a "$_idea/lib/native/linux-x86_64/"* "$_pkg/lib/native/linux-x86_64/"
   cp -a "$_idea/lib/pty4j/linux/"* "$_pkg/lib/pty4j/linux/"
   cp -a "$_idea/lib/jna/amd64/libjnidispatch.so" "$_pkg/lib/jna/amd64/"
+  cp -a "$_idea/lib/skiko-awt-runtime-all/"* "$_pkg/lib/skiko-awt-runtime-all/"
 
-  msg2 "Replacing platform-specific components from CLI tools (Node.js, SDK)..."
-
-  # Node.js
-  rm -rf "$_pkg/tools/node"
-  cp -a "$_cli/tool/node/" "$_pkg/tools/node/"
-  # Symlink bin/* to top level (IDE expects node/npm/npx/corepack alongside bin/)
-  ln -sf bin/* "$_pkg/tools/node/"
+  msg2 "Replacing platform-specific components from CLI tools (SDK, wrappers)..."
 
   # SDK
   rm -rf "$_pkg/sdk"
   cp -a "$_cli/sdk/" "$_pkg/sdk/"
+
+  # CLI terminal wrappers (bin/hvigorw, bin/ohpm, bin/hstack, bin/codelinter, bin/Emulator)
+  # installed as /usr/bin/<tool>; sed-fix their relative ../tool/node and ../sdk references
+  mkdir -p "$_pkg/tools/bin"
+  cp -a "$_cli/bin/"* "$_pkg/tools/bin/"
+  sed -i 's|\$all_tool_dir/tool/node|\$all_tool_dir/node|g; s|\$all_tool_dir/sdk|\$all_tool_dir/../sdk|g' "$_pkg/tools/bin/"*
+  chmod +x "$_pkg/tools/bin/"*
+  mkdir -p "$pkgdir/usr/bin"
+  for _w in hvigorw ohpm hstack codelinter Emulator; do
+    ln -sf /opt/devecostudio/tools/bin/$_w "$pkgdir/usr/bin/$_w"
+  done
 
   # ── Sign path fix (some Huawei plugins expect macOS-style path) ──
   mkdir -p "$_pkg/jbr/Contents/Home"
@@ -225,10 +242,24 @@ SHEOF
   # Mac DMG preserves 700 permissions via cp -a; fix for world-readability
   find "$_pkg" -type d -exec chmod 755 {} \;
   find "$_pkg" -type f -exec chmod 644 {} \;
-  # Restore executability for all ELF binaries (incl. jbr/lib/{jspawnhelper,cef_server,...})
-  find "$_pkg" -type f -exec file {} + | grep -E ': .*ELF' | cut -d: -f1 | xargs -r chmod +x
-  # ...and for shebang scripts
-  find "$_pkg" -type f -exec sh -c 'head -c 2 "$1" | grep -q "^#!" && chmod +x "$1"' _ {} \;
+  # Restore executability for all ELF binaries and shebang scripts.
+  # Use Python (not `file`) to avoid crashes on the huge file tree.
+  python3 - "$_pkg" << 'PYEOF'
+import os, sys
+root = sys.argv[1]
+for dirpath, dirnames, filenames in os.walk(root):
+    for fn in filenames:
+        p = os.path.join(dirpath, fn)
+        try:
+            with open(p, 'rb') as f:
+                magic = f.read(4)
+            if magic[:4] == b'\x7fELF' or magic[:2] == b'#!':
+                st = os.stat(p)
+                if not st.st_mode & 0o111:
+                    os.chmod(p, st.st_mode | 0o111)
+        except OSError:
+            pass
+PYEOF
 
   msg2 "Cleaning platform cruft..."
   find "$_pkg" -name '*.exe' -delete
