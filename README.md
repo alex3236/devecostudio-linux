@@ -1,5 +1,7 @@
 # DevEco Studio — Linux PKGBUILD
 
+**English** | [`中文`](README_CN.md)
+
 Thanks to [Cris.Q](https://crisq.top/blog/deveco_linux_porting_notes) for the original porting notes that inspired this project.
 
 This is an Arch Linux PKGBUILD that packages DevEco Studio (Huawei's IDE for HarmonyOS development) from its Mac DMG distribution, bringing it to Linux with the help of JetBrains' IntelliJ IDEA native launcher and JBR.
