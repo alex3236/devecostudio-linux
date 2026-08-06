@@ -52,6 +52,7 @@ GitHub 账户在公共仓库上可以免费使用 Actions。
 ## 已知限制
 
 - **模拟器** — Linux Command Line Tools 自带的模拟器二进制在命令行下可用（`Emulator -start "<名称>"` 启动，`Emulator -install` 下载系统镜像，需设置 `QT_QPA_PLATFORM=xcb`），但 IDE 内的 Device Manager 不完整：启动按钮始终禁用，无法获取状态。目前请使用命令行。
+- **Wayland 下的 JCEF/CEF 界面** — CEF 类对话框（项目结构、Markdown 预览）的 GPU 进程在 Wayland 下会崩溃（`eglCreateWindowSurface` 段错误）。启动器 wrapper 默认强制 X11 后端来解决（`unset WAYLAND_DISPLAY`、`GDK_BACKEND=x11`）。如果你更喜欢 Wayland，可以在启动前设置 `DEVECO_DISABLE_X11_WORKAROUND=1`——但 CEF 界面会空白/异常。
 
 ## 背后做了什么
 

@@ -28,6 +28,7 @@ depends=(
   'alsa-lib'
   'libxcrypt-compat'
   'freetype2'
+  'libpulse'  # Emulator links system libpulse.so.0
 )
 optdepends=(
   'fcitx5: Chinese input method support for JBR JCEF'
@@ -120,7 +121,7 @@ package() {
   cp -a "$_cli/emulator/" "$_pkg/tools/emulator"
   cp -a "$_cli/tool/node/" "$_pkg/tools/node/"
   # symlink bin/* to tools/node (IDE expects node/npm/npx/corepack alongside bin/)
-  ln -sf bin/* "$_pkg/tools/node/"
+  (cd "$_pkg/tools/node" && ln -sf bin/* .)
   # UxTestService from Mac DMG (Python, cross-platform)
   mkdir -p "$_pkg/tools/UxTestService"
   cp -a "$_mac/tools/UxTestService/"* "$_pkg/tools/UxTestService/"
@@ -195,6 +196,19 @@ VMEOF
   cat > "$_pkg/bin/devecostudio.sh" << 'SHEOF'
 #!/bin/bash
 export _JAVA_AWT_WM_NONREPARENTING=1
+# Emulator uses the Qt xcb platform plugin (no wayland build shipped)
+export QT_QPA_PLATFORM=xcb
+# JCEF (CEF-based UI: project structure, markdown preview) crashes its GPU
+# process under Wayland (eglCreateWindowSurface segfault). Force the X11
+# backend by default; set DEVECO_DISABLE_X11_WORKAROUND=1 to keep Wayland.
+if [[ "${DEVECO_DISABLE_X11_WORKAROUND:-0}" != "1" ]]; then
+  unset WAYLAND_DISPLAY
+  export GDK_BACKEND=x11
+fi
+# Emulator hardcodes the macOS-style image path ~/Library/Huawei/Sdk;
+# bridge it to the Linux location so it finds system images
+mkdir -p "$HOME/Library/Huawei"
+ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
 exec "$(dirname "$(readlink -f "$0")")/devecostudio" "$@"
 SHEOF
   chmod +x "$_pkg/bin/devecostudio.sh"
@@ -252,8 +266,10 @@ for dirpath, dirnames, filenames in os.walk(root):
         p = os.path.join(dirpath, fn)
         try:
             with open(p, 'rb') as f:
-                magic = f.read(4)
-            if magic[:4] == b'\x7fELF' or magic[:2] == b'#!':
+                head = f.read(256)
+            # ELF magic, or a shebang anywhere in the first 256 bytes
+            # (some CLI scripts put a copyright comment before #!)
+            if head[:4] == b'\x7fELF' or b'#!' in head:
                 st = os.stat(p)
                 if not st.st_mode & 0o111:
                     os.chmod(p, st.st_mode | 0o111)
@@ -268,7 +284,10 @@ PYEOF
   find "$_pkg" -name '*.jnilib' -delete
   find "$_pkg" -name '*.bat' -delete
   find "$_pkg" -name '*.ps1' -delete
-  find "$_pkg" -name '*.sh' -not -path '*/bin/devecostudio.sh' -delete
+  # Remove Windows/macOS wrapper scripts, but keep real .sh files inside the
+  # SDK (lldb launchers, cmake modules, build helpers)
+  find "$_pkg/bin" "$_pkg/tools/bin" -name '*.sh' -not -path '*/bin/devecostudio.sh' -delete 2>/dev/null || true
+  find "$_pkg/plugins" -name '*.sh' -delete 2>/dev/null || true
 
   # ── Desktop entry & symlink ──
   install -Dm644 "$srcdir/devecostudio.desktop" "$pkgdir/usr/share/applications/devecostudio.desktop"

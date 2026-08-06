@@ -58,6 +58,7 @@ A GitHub account can use Actions for free on public repositories.
 ## Known limitations
 
 - **Emulator** — The emulator binary from the Linux Command Line Tools works from the CLI (`Emulator -start "<name>"`, `Emulator -install` to download system images, with `QT_QPA_PLATFORM=xcb`), but the Device Manager inside the IDE is not fully functional: the start button stays disabled and the status cannot be fetched. Use the CLI for now.
+- **JCEF/CEF UI under Wayland** — CEF-based dialogs (project structure, markdown preview) crash their GPU process under Wayland (`eglCreateWindowSurface` segfault). The launcher wrapper works around this by forcing the X11 backend by default (`unset WAYLAND_DISPLAY`, `GDK_BACKEND=x11`). If you prefer Wayland, set `DEVECO_DISABLE_X11_WORKAROUND=1` before launching — but expect CEF UI to be blank/broken.
 
 ## What happens under the hood
 
