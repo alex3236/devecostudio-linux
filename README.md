@@ -129,6 +129,21 @@ The only truly platform-specific things we swap out are:
 Everything else — the Java code, plugins, templates, build tools — is
 platform-independent.
 
+### The emulator
+
+Two emulator-related quirks deserve a mention. First, Huawei's code only
+distinguishes Mac from non-Mac, and the non-Mac branch hardcodes the
+`Emulator.exe` filename. On Linux that file does not exist, which broke the
+Device Manager and debugging. The package fixes this with a symlink:
+`Emulator.exe -> Emulator` in `tools/emulator/`.
+
+Second, system images must be downloaded manually because of how the
+official installer works: when the emulator is missing, its wizard downloads
+the binary *and* the system image together. Since this package bundles the
+binary, the IDE thinks the emulator is installed and never offers the
+wizard, leaving the system image as the only missing piece — see the
+Emulator section above for how to get one.
+
 ## License situation
 
 This project is not affiliated with or endorsed by Huawei.
