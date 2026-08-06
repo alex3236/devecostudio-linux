@@ -17,7 +17,7 @@ pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=3
+pkgrel=4
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -134,6 +134,15 @@ package() {
   cp -a "$_cli/tool/node/" "$_pkg/tools/node/"
   # symlink bin/* to tools/node (IDE expects node/npm/npx/corepack alongside bin/)
   (cd "$_pkg/tools/node" && ln -sf bin/* .)
+  # The IDE's node version check (getNpmVersionFast) looks for npm's
+  # package.json at <parentDir>/lib/node_modules/npm/package.json where
+  # parentDir = <nodeDir>/.. — i.e. tools/lib/node_modules — but the CLI
+  # ships npm under <nodeDir>/lib/node_modules (upstream node layout).
+  # Without these symlinks, project sync reports "Invalid project Node.js
+  # path" even though node itself is fine.
+  ln -sfn lib/node_modules "$_pkg/tools/node/node_modules"
+  mkdir -p "$_pkg/tools/lib"
+  ln -sfn ../node/lib/node_modules "$_pkg/tools/lib/node_modules"
   # UxTestService from Mac DMG (Python, cross-platform)
   mkdir -p "$_pkg/tools/UxTestService"
   cp -a "$_mac/tools/UxTestService/"* "$_pkg/tools/UxTestService/"
@@ -199,10 +208,10 @@ VMEOF
   sed -i 's|cd "$(dirname "$0")"|cd "$(dirname "$(readlink -f "$0")")"|' "$_pkg/tools/bin/"*
   sed -i 's|\$all_tool_dir/tool/node|\$all_tool_dir/node|g; s|\$all_tool_dir/sdk|\$all_tool_dir/../sdk|g' "$_pkg/tools/bin/"*
   chmod +x "$_pkg/tools/bin/"*
-  # codelinter's launcher hardcodes <tools>/tool/node and <tools>/sdk
-  mkdir -p "$_pkg/tools/tool"
-  ln -sf ../node "$_pkg/tools/tool/node"
-  ln -sf ../sdk "$_pkg/tools/sdk"
+  # codelinter's launcher hardcodes <tools>/tool/node and <tools>/sdk;
+  # rewrite them to our actual layout instead of adding symlinks that
+  # could confuse the IDE's node discovery.
+  sed -i 's|\$ROOT_PATH/tool/node|\$ROOT_PATH/node|; s|\$ROOT_PATH/sdk|\$ROOT_PATH/../sdk|' "$_pkg/tools/codelinter/bin/codelinter"
   if [[ "$_expose_cli_tools" == "true" ]]; then
     mkdir -p "$pkgdir/usr/bin"
     # Huawei-specific names: expose as-is
