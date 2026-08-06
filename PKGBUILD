@@ -302,7 +302,7 @@ for dirpath, dirnames, filenames in os.walk(root):
 PYEOF
 
   msg2 "Cleaning platform cruft..."
-  find "$_pkg" -name '*.exe' -delete
+  find "$_pkg" -name '*.exe' -not -name 'Emulator.exe' -delete
   find "$_pkg" -name '*.dll' -delete
   find "$_pkg" -name '*.dylib' -delete
   find "$_pkg" -name '*.jnilib' -delete
