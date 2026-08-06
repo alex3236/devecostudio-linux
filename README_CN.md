@@ -73,7 +73,7 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 模拟器可用，但需手动下载系统镜像：
 
-- 用命令行下载（无需华为账号）：`Emulator -install -deviceType phone -osVersion "<版本>"`（`Emulator -imageList` 查看可用版本），或
+- 用命令行下载（无需华为账号）：`hemulator -install -deviceType phone -osVersion "<版本>"`（`hemulator -imageList` 查看可用版本），或
 - 从其他平台的 DevEco Studio 安装中把 `system-image/` 目录复制到 `~/.Huawei/Sdk/system-image/`。
 
 ## Wayland

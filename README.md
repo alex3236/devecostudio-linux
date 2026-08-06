@@ -86,7 +86,7 @@ Both behaviors are controlled by variables at the top of the PKGBUILD:
 The emulator works, but you must download system images manually:
 
 - From the CLI: `hemulator -install -deviceType
-  phone -osVersion "<version>"` (list versions with `Emulator -imageList`),
+  phone -osVersion "<version>"` (list versions with `hemulator -imageList`),
   or
 - Copy the `system-image/` folder from an existing DevEco Studio
   installation on another platform into `~/.Huawei/Sdk/system-image/`.
