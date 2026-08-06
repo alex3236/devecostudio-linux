@@ -51,7 +51,7 @@ GitHub 账户在公共仓库上可以免费使用 Actions。
 
 ## 已知限制
 
-- **模拟器** — macOS 的模拟器二进制无法移植。Oniro 项目提供了 [OpenHarmony 模拟器](https://docs.oniroproject.org/device-development/developer-boards/emulator)，但它无法替代 HarmonyOS 模拟器。
+- **模拟器** — Linux Command Line Tools 自带的模拟器二进制在命令行下可用（`Emulator -start "<名称>"` 启动，`Emulator -install` 下载系统镜像，需设置 `QT_QPA_PLATFORM=xcb`），但 IDE 内的 Device Manager 不完整：启动按钮始终禁用，无法获取状态。目前请使用命令行。
 
 ## 背后做了什么
 

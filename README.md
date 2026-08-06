@@ -57,7 +57,7 @@ A GitHub account can use Actions for free on public repositories.
 
 ## Known limitations
 
-- **Emulator** — The macOS emulator binary is not portable. There is an OpenHarmony emulator from the [Oniro project](https://docs.oniroproject.org/device-development/developer-boards/emulator), but it cannot replace the HarmonyOS emulator.
+- **Emulator** — The emulator binary from the Linux Command Line Tools works from the CLI (`Emulator -start "<name>"`, `Emulator -install` to download system images, with `QT_QPA_PLATFORM=xcb`), but the Device Manager inside the IDE is not fully functional: the start button stays disabled and the status cannot be fetched. Use the CLI for now.
 
 ## What happens under the hood
 
