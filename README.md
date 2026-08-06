@@ -8,7 +8,9 @@ This is an Arch Linux PKGBUILD that packages DevEco Studio (Huawei's IDE for Har
 
 It is not an official package. It is not endorsed by Huawei or JetBrains.
 
-## How to build
+## Building
+
+### Locally with makepkg
 
 Always check `PKGBUILD` yourself.
 
@@ -36,7 +38,7 @@ To use a different version:
 Only the versions in `pkgver` have been tested — if you modify them, test
 the result yourself.
 
-## Building with GitHub Actions
+### With GitHub Actions
 
 If you don't have an Arch machine at hand, the same build can be run in
 GitHub Actions:
@@ -55,27 +57,77 @@ GitHub Actions:
 
 A GitHub account can use Actions for free on public repositories.
 
-## Known limitations
+## CLI tools on PATH
 
-- **Emulator** — The emulator binary from the Linux Command Line Tools works from the CLI (`Emulator -start "<name>"`, `Emulator -install` to download system images, with `QT_QPA_PLATFORM=xcb`), but the Device Manager inside the IDE is not fully functional: the start button stays disabled and the status cannot be fetched. Use the CLI for now.
-- **JCEF/CEF UI under Wayland** — CEF-based dialogs (project structure, markdown preview) crash their GPU process under Wayland (`eglCreateWindowSurface` segfault). The launcher wrapper works around this by forcing the X11 backend by default (`unset WAYLAND_DISPLAY`, `GDK_BACKEND=x11`). If you prefer Wayland, set `DEVECO_DISABLE_X11_WORKAROUND=1` before launching — but expect CEF UI to be blank/broken.
+The IDE needs the bundled Huawei command-line tools at runtime, and they
+also work standalone from a terminal. By default the package symlinks them
+into `/usr/bin`:
+
+| `/usr/bin` entry | Tool | Note |
+|---|---|---|
+| `devecostudio` | IDE launcher | always installed |
+| `hvigorw` | build tool | Huawei-specific name, exposed as-is |
+| `ohpm` | package manager | Huawei-specific name, exposed as-is |
+| `hstack` | toolchain helper | Huawei-specific name, exposed as-is |
+| `hcodelinter` | code linter | prefixed with `h` to avoid collisions |
+| `hemulator` | emulator CLI | prefixed with `h` to avoid collisions |
+
+Both behaviors are controlled by variables at the top of the PKGBUILD:
+
+- `_expose_cli_tools=true` — set to `false` to keep the tools out of
+  `/usr/bin` entirely (they stay under `/opt/devecostudio/tools/bin/` and
+  can still be called by full path).
+- `_hprefix_generic_tools=true` — set to `false` to drop the `h` prefix
+  and expose `codelinter` / `Emulator` under their original names (which
+  may collide with other packages).
+
+## Emulator
+
+The emulator works, but you must download system images manually:
+
+- From the CLI: `hemulator -install -deviceType
+  phone -osVersion "<version>"` (list versions with `Emulator -imageList`),
+  or
+- Copy the `system-image/` folder from an existing DevEco Studio
+  installation on another platform into `~/.Huawei/Sdk/system-image/`.
+
+## Wayland
+
+Most of the IDE runs fine under Wayland, but the CEF-based user interfaces
+— the project structure dialog, markdown preview, and similar — crash their
+GPU process under Wayland (`eglCreateWindowSurface` segfault). The launcher
+wrapper works around this by forcing the X11 backend by default
+(`unset WAYLAND_DISPLAY`, `GDK_BACKEND=x11`), which makes every CEF page
+render correctly through XWayland.
+
+If you prefer to run under Wayland natively, set
+`DEVECO_DISABLE_X11_WORKAROUND=1` before launching — but expect the CEF
+pages to be blank or broken.
 
 ## What happens under the hood
 
-The PKGBUILD extracts the Mac DMG and takes the platform-independent parts — JARs, plugins, modules, tools (hvigor, ohpm, etc.). Then it replaces the macOS-specific bits (launcher, JBR, native libraries) with their Linux counterparts from IntelliJ IDEA. The vmoptions and product-info.json are transformed on the fly so the IDE knows it's running on Linux.
+The PKGBUILD extracts the Mac DMG and takes the platform-independent parts
+— JARs, plugins, modules, tools (hvigor, ohpm, etc.). Then it replaces the
+macOS-specific bits (launcher, JBR, native libraries) with their Linux
+counterparts from IntelliJ IDEA. The vmoptions and product-info.json are
+transformed on the fly so the IDE knows it's running on Linux.
 
-The result is a native-feeling DevEco Studio that runs without Wine or containers.
+The result is a native-feeling DevEco Studio that runs without Wine or
+containers.
 
-## Why repackage from the Mac version?
-
-Huawei distributes DevEco Studio for Windows, macOS, and Linux. The Linux distribution has two problems: the installer is an `.exe` that is hard to extract, and the packaged version lags behind in updates. The Mac DMG is trivially extractable and contains all the cross-platform files we need.
+Why repackage from the Mac version? Huawei distributes DevEco Studio for
+Windows, macOS, and Linux. The Linux distribution has two problems: the
+installer is an `.exe` that is hard to extract, and the packaged version
+lags behind in updates. The Mac DMG is trivially extractable and contains
+all the cross-platform files we need.
 
 The only truly platform-specific things we swap out are:
 - The Java runtime (JBR) — macOS → Linux
 - The native launcher binary
 - Shared libraries (.so files)
 
-Everything else — the Java code, plugins, templates, build tools — is platform-independent.
+Everything else — the Java code, plugins, templates, build tools — is
+platform-independent.
 
 ## License situation
 
@@ -88,7 +140,7 @@ DevEco Studio is a commercial product owned by Huawei. Before using it, you agre
 - **Clause 1.7(h)** prohibits reverse engineering, decompiling, or creating derivative works.
 - **Clause 1.7(i)** prohibits distributing, selling, or transferring the service.
 
-This packaging project extracts platform-independent files from the Mac DMG and recombines them with Linux-native components (launcher, JBR, native libraries) from IntelliJ IDEA. The Java bytecode and resources are not modified, but configuration files are transformed. This likely constitutes "modification" and "merging" under clauses 1.7(f) and 1.7(h). 
+This packaging project extracts platform-independent files from the Mac DMG and recombines them with Linux-native components (launcher, JBR, native libraries) from IntelliJ IDEA. The Java bytecode and resources are not modified, but configuration files are transformed. This likely constitutes "modification" and "merging" under clauses 1.7(f) and 1.7(h).
 
 What this means in practice:
 - Building this package for personal use is what the author does, and the project exists to document that process.

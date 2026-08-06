@@ -17,6 +17,14 @@ pkgname=devecostudio
 pkgver=26.0.0.621
 _ideaver=2026.1.3
 pkgrel=1
+# ── CLI tool exposure ──
+# The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
+# live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
+# keep them out of /usr/bin entirely (use full paths instead).
+_expose_cli_tools=true
+# codelinter and Emulator are generic names that may collide with other
+# packages; prefix them with "h" unless you opt out.
+_hprefix_generic_tools=true
 install='devecostudio.install'
 arch=('x86_64')
 url='https://developer.huawei.com/consumer/cn/deveco-studio/'
@@ -119,6 +127,10 @@ package() {
   cp -a "$_cli/hstack/" "$_pkg/tools/hstack"
   cp -a "$_cli/codelinter/" "$_pkg/tools/codelinter"
   cp -a "$_cli/emulator/" "$_pkg/tools/emulator"
+  # Huawei's code only distinguishes Mac vs non-Mac; the non-Mac branch
+  # hardcodes the "Emulator.exe" name. Symlink it to the real binary so
+  # Device Manager and debugging work on Linux.
+  ln -sf Emulator "$_pkg/tools/emulator/Emulator.exe"
   cp -a "$_cli/tool/node/" "$_pkg/tools/node/"
   # symlink bin/* to tools/node (IDE expects node/npm/npx/corepack alongside bin/)
   (cd "$_pkg/tools/node" && ln -sf bin/* .)
@@ -178,15 +190,27 @@ VMEOF
   cp -a "$_cli/sdk/" "$_pkg/sdk/"
 
   # CLI terminal wrappers (bin/hvigorw, bin/ohpm, bin/hstack, bin/codelinter, bin/Emulator)
-  # installed as /usr/bin/<tool>; sed-fix their relative ../tool/node and ../sdk references
+  # stay under tools/bin/ for the IDE; optionally expose them via /usr/bin
+  # (sed-fix their relative ../tool/node and ../sdk references first)
   mkdir -p "$_pkg/tools/bin"
   cp -a "$_cli/bin/"* "$_pkg/tools/bin/"
   sed -i 's|\$all_tool_dir/tool/node|\$all_tool_dir/node|g; s|\$all_tool_dir/sdk|\$all_tool_dir/../sdk|g' "$_pkg/tools/bin/"*
   chmod +x "$_pkg/tools/bin/"*
-  mkdir -p "$pkgdir/usr/bin"
-  for _w in hvigorw ohpm hstack codelinter Emulator; do
-    ln -sf /opt/devecostudio/tools/bin/$_w "$pkgdir/usr/bin/$_w"
-  done
+  if [[ "$_expose_cli_tools" == "true" ]]; then
+    mkdir -p "$pkgdir/usr/bin"
+    # Huawei-specific names: expose as-is
+    for _w in hvigorw ohpm hstack; do
+      ln -sf /opt/devecostudio/tools/bin/$_w "$pkgdir/usr/bin/$_w"
+    done
+    # Generic names: prefix with "h" by default to avoid collisions
+    if [[ "$_hprefix_generic_tools" == "true" ]]; then
+      ln -sf /opt/devecostudio/tools/bin/codelinter "$pkgdir/usr/bin/hcodelinter"
+      ln -sf /opt/devecostudio/tools/bin/Emulator "$pkgdir/usr/bin/hemulator"
+    else
+      ln -sf /opt/devecostudio/tools/bin/codelinter "$pkgdir/usr/bin/codelinter"
+      ln -sf /opt/devecostudio/tools/bin/Emulator "$pkgdir/usr/bin/Emulator"
+    fi
+  fi
 
   # ── Sign path fix (some Huawei plugins expect macOS-style path) ──
   mkdir -p "$_pkg/jbr/Contents/Home"

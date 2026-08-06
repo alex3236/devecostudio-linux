@@ -8,7 +8,9 @@
 
 这不是官方包，也未获得华为或 JetBrains 的认可。
 
-## 如何构建
+## 构建
+
+### 本地用 makepkg 构建
 
 请务必自行检查 `PKGBUILD`。
 
@@ -31,7 +33,7 @@ IntelliJ IDEA 的 tarball 会自动从 JetBrains CDN 下载。
 
 只有 `pkgver` 中的版本经过测试——如果你做了修改，请自行测试结果。
 
-## 使用 GitHub Actions 构建
+### 用 GitHub Actions 构建
 
 如果你手边没有 Arch 机器，也可以用 GitHub Actions 跑同样的构建：
 
@@ -49,10 +51,36 @@ IntelliJ IDEA 的 tarball 会自动从 JetBrains CDN 下载。
 
 GitHub 账户在公共仓库上可以免费使用 Actions。
 
-## 已知限制
+## PATH 上的 CLI 工具
 
-- **模拟器** — Linux Command Line Tools 自带的模拟器二进制在命令行下可用（`Emulator -start "<名称>"` 启动，`Emulator -install` 下载系统镜像，需设置 `QT_QPA_PLATFORM=xcb`），但 IDE 内的 Device Manager 不完整：启动按钮始终禁用，无法获取状态。目前请使用命令行。
-- **Wayland 下的 JCEF/CEF 界面** — CEF 类对话框（项目结构、Markdown 预览）的 GPU 进程在 Wayland 下会崩溃（`eglCreateWindowSurface` 段错误）。启动器 wrapper 默认强制 X11 后端来解决（`unset WAYLAND_DISPLAY`、`GDK_BACKEND=x11`）。如果你更喜欢 Wayland，可以在启动前设置 `DEVECO_DISABLE_X11_WORKAROUND=1`——但 CEF 界面会空白/异常。
+IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端使用。默认情况下，包会把它们软链到 `/usr/bin`：
+
+| `/usr/bin` 入口 | 工具 | 说明 |
+|---|---|---|
+| `devecostudio` | IDE 启动器 | 始终安装 |
+| `hvigorw` | 构建工具 | 华为特有名称，原名暴露 |
+| `ohpm` | 包管理器 | 华为特有名称，原名暴露 |
+| `hstack` | 工具链辅助 | 华为特有名称，原名暴露 |
+| `hcodelinter` | 代码检查 | 加 `h` 前缀避免冲突 |
+| `hemulator` | 模拟器 CLI | 加 `h` 前缀避免冲突 |
+
+两种行为都由 PKGBUILD 顶部的变量控制：
+
+- `_expose_cli_tools=true` — 设为 `false` 则完全不暴露到 `/usr/bin`（工具仍留在 `/opt/devecostudio/tools/bin/`，可用完整路径调用）。
+- `_hprefix_generic_tools=true` — 设为 `false` 则去掉 `h` 前缀，以原名暴露 `codelinter` / `Emulator`（可能与其他包冲突）。
+
+## 模拟器
+
+模拟器可用，但需手动下载系统镜像：
+
+- 用命令行下载（无需华为账号）：`Emulator -install -deviceType phone -osVersion "<版本>"`（`Emulator -imageList` 查看可用版本），或
+- 从其他平台的 DevEco Studio 安装中把 `system-image/` 目录复制到 `~/.Huawei/Sdk/system-image/`。
+
+## Wayland
+
+IDE 大部分功能在 Wayland 下正常，但基于 CEF 的界面——项目结构对话框、Markdown 预览等——的 GPU 进程在 Wayland 下会崩溃（`eglCreateWindowSurface` 段错误）。启动器 wrapper 默认强制 X11 后端来解决（`unset WAYLAND_DISPLAY`、`GDK_BACKEND=x11`），让所有 CEF 页面通过 XWayland 正常渲染。
+
+如果你更想原生运行在 Wayland 下，可以在启动前设置 `DEVECO_DISABLE_X11_WORKAROUND=1`——但 CEF 页面会空白或异常。
 
 ## 背后做了什么
 
@@ -60,9 +88,7 @@ PKGBUILD 解压 Mac DMG，取出平台无关的部分——JAR、插件、module
 
 最终得到一个无需 Wine 或容器即可运行的原生体验 DevEco Studio。
 
-## 为什么从 Mac 版重新打包？
-
-华为为 Windows、macOS 和 Linux 分发 DevEco Studio。Linux 发行版有两个问题：安装器是难以解包的 `.exe`，且打包版本更新滞后。Mac DMG 可以轻松解包，且包含我们需要的全部跨平台文件。
+为什么从 Mac 版重新打包？华为为 Windows、macOS 和 Linux 分发 DevEco Studio。Linux 发行版有两个问题：安装器是难以解包的 `.exe`，且打包版本更新滞后。Mac DMG 可以轻松解包，且包含我们需要的全部跨平台文件。
 
 真正平台相关的、需要替换的部分只有：
 - Java 运行时（JBR）— macOS → Linux
