@@ -14,9 +14,10 @@
 #    Download from same page
 
 pkgname=devecostudio
+pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=2
+pkgrel=3
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -25,7 +26,6 @@ _expose_cli_tools=true
 # codelinter and Emulator are generic names that may collide with other
 # packages; prefix them with "h" unless you opt out.
 _hprefix_generic_tools=true
-install='devecostudio.install'
 arch=('x86_64')
 url='https://developer.huawei.com/consumer/cn/deveco-studio/'
 license=('custom:Commercial')

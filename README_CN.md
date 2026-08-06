@@ -10,9 +10,15 @@
 
 ## 构建
 
-### 本地用 makepkg 构建
-
 请务必自行检查 `PKGBUILD`。
+
+要使用经过测试的 PKGBUILD，请使用已打 tag 的版本——默认分支可能包含未测试的改动：
+
+    git checkout 26.0.0.621-2
+
+Tag 名中的版本号也是该 PKGBUILD 的 `pkgver`，即下方需要下载的 DevEco Studio 版本（例如 `26.0.0.621`）。
+
+### 本地构建（makepkg）
 
 你需要从华为官网手动下载两个文件：
 
@@ -99,7 +105,9 @@ PKGBUILD 解压 Mac DMG，取出平台无关的部分——JAR、插件、module
 
 ### 模拟器
 
-有两个与模拟器相关的问题值得说明。其一，华为的代码只区分 Mac 与非 Mac，而非 Mac 分支硬编码了 `Emulator.exe` 文件名。在 Linux 上这个文件不存在，导致 Device Manager 和调试不可用。本包通过符号链接修复：`tools/emulator/` 下的 `Emulator.exe -> Emulator`。
+有两个与模拟器相关的问题值得说明。
+
+其一，华为的代码只区分 Mac 与非 Mac，而非 Mac 分支硬编码了 `Emulator.exe` 文件名。在 Linux 上这个文件不存在，导致 Device Manager 和调试不可用。本包通过符号链接修复：`tools/emulator/` 下的 `Emulator.exe -> Emulator`。
 
 其二，系统镜像必须手动下载，这是官方安装器的工作方式决定的：当模拟器缺失时，其向导会同时下载二进制和系统镜像。由于本包已内置二进制，IDE 认为模拟器已安装、从不弹出向导，系统镜像成了唯一缺失的部分——获取方式见上文"模拟器"一节。
 
@@ -123,7 +131,9 @@ DevEco Studio 是华为的商业产品。使用前即表示你同意《华为 De
 
 ### 打包脚本的许可
 
-构成此打包项目的文件（PKGBUILD、devecostudio.install、devecostudio.desktop、工作流和 README）采用 BSD 2-Clause 许可。它们不属于 DevEco Studio，不承载华为条款中的任何限制。
+构成此打包项目的文件采用 BSD 2-Clause 许可。
+
+它们不属于 DevEco Studio，不承载华为条款中的任何限制。
 
 ### 内置组件的许可
 

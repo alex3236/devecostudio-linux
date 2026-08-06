@@ -10,9 +10,17 @@ It is not an official package. It is not endorsed by Huawei or JetBrains.
 
 ## Building
 
-### Locally with makepkg
-
 Always check `PKGBUILD` yourself.
+
+For the tested, release-quality version (of PKGBUILD),
+use a tagged release — the default branch may carry untested changes:
+
+    git checkout 26.0.0.621-2
+
+The version in the tag is the `pkgver` in that PKGBUILD — i.e. the DevEco
+Studio version you should download below (e.g. `26.0.0.621`).
+
+### Locally with makepkg
 
 You will need to manually download two files from Huawei's website:
 
@@ -45,13 +53,14 @@ GitHub Actions:
 
 1. **Fork** this repository (the workflow is triggered manually), or use your own fork of it.
 2. Open the **Actions** tab, select the **Build DevEco Studio PKGBUILD** workflow and click **Run workflow**.
-3. Fill in the two download URLs (Huawei links expire, so you need fresh ones from the [download page](https://developer.huawei.com/consumer/cn/deveco-studio/) each time):
+3. Optionally, "Use workflow from" a tagged release.
+4. Fill in the two download URLs (Huawei links expire, so you need fresh ones from the [download page](https://developer.huawei.com/consumer/cn/deveco-studio/) each time):
    - `mac_zip_url` — URL of the Mac zip
    - `cli_zip_url` — URL of the Linux Command Line Tools zip
-4. Optionally override the version and checksums (leave empty to keep the values in `PKGBUILD`):
+5. Optionally override the version and checksums (leave empty to keep the values in `PKGBUILD`):
    - `pkgver` — e.g. `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — SHA256 of the two zips; use `SKIP` to skip verification for an untested version
-5. When the run finishes, download the `devecostudio-pkg` artifact from the run page and install it locally:
+6. When the run finishes, download the `devecostudio-pkg` artifact from the run page and install it locally:
 
        sudo pacman -U devecostudio-*.pkg.tar.zst
 
@@ -131,7 +140,9 @@ platform-independent.
 
 ### The emulator
 
-Two emulator-related quirks deserve a mention. First, Huawei's code only
+Two emulator-related quirks deserve a mention.
+
+First, Huawei's code only
 distinguishes Mac from non-Mac, and the non-Mac branch hardcodes the
 `Emulator.exe` filename. On Linux that file does not exist, which broke the
 Device Manager and debugging. The package fixes this with a symlink:
@@ -164,7 +175,9 @@ What this means in practice:
 
 ### Licensing of the packaging scripts
 
-The files that make up this packaging project (PKGBUILD, devecostudio.install, devecostudio.desktop, workflow, and README) are provided under the BSD 2-Clause license. They are not part of DevEco Studio and carry no restrictions from Huawei's terms.
+The files that make up this packaging project are provided under the BSD 2-Clause license.
+
+They are not part of DevEco Studio and carry no restrictions from Huawei's terms.
 
 ### Licensing of bundled components
 
