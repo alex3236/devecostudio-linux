@@ -16,7 +16,7 @@
 pkgname=devecostudio
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=1
+pkgrel=2
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
