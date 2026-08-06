@@ -2,11 +2,21 @@
 
 [`English`](README.md) | **中文**
 
+<p align="center">
+  <img src=".github/images/screenshot.png" alt="screenshot" width="80%" />
+</p>
+
 感谢 [Cris.Q](https://crisq.top/blog/deveco_linux_porting_notes) 的移植笔记，本项目受其启发。
 
 这是一个 Arch Linux PKGBUILD，将 DevEco Studio（华为的 HarmonyOS 开发 IDE）的 Mac DMG 发行版重新打包到 Linux，借助 JetBrains IntelliJ IDEA 的原生启动器和 JBR 实现。
 
 这不是官方包，也未获得华为或 JetBrains 的认可。
+
+## 功能
+
+DevEco Studio 的绝大多数功能都应正常工作。若你发现任何问题，请在 Issues 中报告。
+
+相信华为很快会发布官方的 Linux 版本（除 IDE 本体外的几乎所有其他组件都已在 Linux 上可用），届时本项目将归档。
 
 ## 构建
 
