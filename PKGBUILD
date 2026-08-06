@@ -194,8 +194,15 @@ VMEOF
   # (sed-fix their relative ../tool/node and ../sdk references first)
   mkdir -p "$_pkg/tools/bin"
   cp -a "$_cli/bin/"* "$_pkg/tools/bin/"
+  # Resolve $0 through readlink so the wrappers also work when invoked via
+  # the /usr/bin symlinks (dirname "$0" would resolve to /usr/bin)
+  sed -i 's|cd "$(dirname "$0")"|cd "$(dirname "$(readlink -f "$0")")"|' "$_pkg/tools/bin/"*
   sed -i 's|\$all_tool_dir/tool/node|\$all_tool_dir/node|g; s|\$all_tool_dir/sdk|\$all_tool_dir/../sdk|g' "$_pkg/tools/bin/"*
   chmod +x "$_pkg/tools/bin/"*
+  # codelinter's launcher hardcodes <tools>/tool/node and <tools>/sdk
+  mkdir -p "$_pkg/tools/tool"
+  ln -sf ../node "$_pkg/tools/tool/node"
+  ln -sf ../sdk "$_pkg/tools/sdk"
   if [[ "$_expose_cli_tools" == "true" ]]; then
     mkdir -p "$pkgdir/usr/bin"
     # Huawei-specific names: expose as-is
