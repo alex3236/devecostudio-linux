@@ -45,13 +45,14 @@ IntelliJ IDEA 的 tarball 会自动从 JetBrains CDN 下载。
 
 1. **Fork** 本仓库（该工作流需要手动触发），或使用你自己的 fork。
 2. 打开 **Actions** 标签页，选择 **Build DevEco Studio PKGBUILD** 工作流，点击 **Run workflow**。
-3. 填写两个下载 URL（华为的链接会过期，每次构建都需要从[下载页](https://developer.huawei.com/consumer/cn/deveco-studio/)获取新链接）：
+3. 可选：在 **Use workflow from** 中选择已打 tag 的发布版本。
+4. 填写两个下载 URL（华为的链接会过期，每次构建都需要从[下载页](https://developer.huawei.com/consumer/cn/deveco-studio/)获取新链接）：
    - `mac_zip_url` — Mac zip 的 URL
    - `cli_zip_url` — Linux Command Line Tools zip 的 URL
-4. 可选地覆盖版本号和校验值（留空则使用 `PKGBUILD` 中的值）：
+5. 可选地覆盖版本号和校验值（留空则使用 `PKGBUILD` 中的值）：
    - `pkgver` — 例如 `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — 两个 zip 的 SHA256；未测试过的版本可用 `SKIP` 跳过校验
-5. 运行结束后，从运行页面下载 `devecostudio-pkg` artifact，并在本地安装：
+6. 运行结束后，从运行页面下载 `devecostudio-pkg` artifact，并在本地安装：
 
        sudo pacman -U devecostudio-*.pkg.tar.zst
 
