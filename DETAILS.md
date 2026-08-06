@@ -25,23 +25,6 @@ signed and expire), renamed to version-independent filenames
 tarball is auto-downloaded. Checksums live in `sha256sums`; users changing
 versions update `pkgver` + the two checksums (or use `SKIP`).
 
-## IDEA version matching (critical)
-
-DevEco Studio is a fork of IntelliJ IDEA with a pinned baseline build.
-Mismatching baselines cause subtle breakage:
-
-- `pkgver=26.0.0.621` → product-info shows `DS-261.23567.138.36.2600621` → baseline **IU-261.23567.138** = **IDEA 2026.1.1**.
-- `pkgver=6.1.1.280` → baseline **243.24978.46** = **IDEA 2024.3**.
-
-When adapting for a new DevEco version, check the DMG's
-`Resources/product-info.json` `buildNumber` and pick the matching IDEA
-release. When you bump `pkgver`, re-derive `_ideaver` from the new
-`buildNumber`; the URL pattern is
-`https://download.jetbrains.com/idea/idea-${_ideaver}.tar.gz`.
-
-**Do not** use the GitHub `intellij-community` release tarballs — those are
-source code without JBR/native binaries.
-
 ## The magic, by area
 
 ### Emulator (`Emulator.exe` symlink)
@@ -65,8 +48,6 @@ bundle the binary, the wizard never triggers — system images are the only
 missing piece and must be fetched manually:
 `Emulator -install -deviceType phone -osVersion "<version>"` (anonymous),
 or copied from another platform's install into `~/.Huawei/Sdk/system-image/`.
-In-IDE downloads additionally require a Huawei account (HarmonyOS images
-are not public).
 
 ### Emulator paths (`~/Library/Huawei/Sdk`)
 
@@ -102,11 +83,6 @@ in `bin/`, npm under `lib/node_modules/npm`. Three things are needed on top:
    warning disappear is explained by `findRealNodeDir()` falling back to
    `tools/node/bin` when the top-level `node` is absent — and the npm
    check path then happens to resolve to the real npm location.
-
-A note from PORT_REPORT §4.4 claims the validation "does not recognize
-symlinks" and recommends replacing the top-level `node` with a real file.
-That is **not** required in 26.0.0 once the npm-check symlinks are in
-place — the top-level `node` stays a symlink and sync passes.
 
 ### CLI tool wrappers (three sed rewrites)
 
@@ -206,8 +182,7 @@ is deliberately **not** stripped (contains cross-compiled ARM binaries).
 
 ### `ohos-trace` plugin removal
 
-`plugins/ohos-trace` is deleted; it carries the "lemon" plugin bug (see
-PORT_REPORT §4.6 — exit hang).
+`plugins/ohos-trace` is deleted; it carries the "lemon" plugin bug (exit hang).
 
 ### UxTestService
 
@@ -302,4 +277,4 @@ The wrapper (devecostudio.sh) responsibilities, in order:
   `bin/*` symlink — always `(cd dir && ln -sf ...)`.
 - The `find "$_pkg" -name '*.sh' -delete` blanket rule is a footgun (SDK
   content) — keep it scoped.
-- Wayland + NVIDIA/niri: JCEF GPU process crashes; use the X11 workaround.
+- Wayland: JCEF GPU process crashes; use the X11 workaround.
