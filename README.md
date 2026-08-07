@@ -190,6 +190,10 @@ binary, the IDE thinks the emulator is installed and never offers the
 wizard, leaving the system image as the only missing piece — see the
 Emulator section above for how to get one.
 
+### Some magic
+
+For the sake of brevity, you can check [DETAILS.md](DETAILS.md) to learn about other magic used in this project.
+
 ## License situation
 
 This project is not affiliated with or endorsed by Huawei.
