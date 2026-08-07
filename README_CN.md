@@ -24,7 +24,7 @@ DevEco Studio 的绝大多数功能都应正常工作。若你发现任何问题
 
 要使用经过测试的 PKGBUILD，请使用已打 tag 的版本——默认分支可能包含未测试的改动：
 
-    git checkout 26.0.0.621-2
+    git checkout 26.0.0.621-4
 
 Tag 名中的版本号也是该 PKGBUILD 的 `pkgver`，即下方需要下载的 DevEco Studio 版本（例如 `26.0.0.621`）。
 
@@ -68,6 +68,16 @@ IntelliJ IDEA 的 tarball 会自动从 JetBrains CDN 下载。
 
 GitHub 账户在公共仓库上可以免费使用 Actions。
 
+### 在其他发行版上使用
+
+工作流还会生成一个与发行版无关的 tarball（`devecostudio-<版本>-linux-x86_64.tar.gz`），包含完整的 `/opt/devecostudio` 目录和根目录下的 `devecostudio.desktop`。在 Debian/Ubuntu/Fedora 或任何其他 Linux 上，解压并手动设置启动器：
+
+    sudo tar -xzf devecostudio-<版本>-linux-x86_64.tar.gz -C /opt
+    sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
+    sudo desktop-file-install /opt/devecostudio.desktop
+
+还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`。中文输入支持需要 `fcitx5`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
+
 ## PATH 上的 CLI 工具
 
 IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端使用。默认情况下，包会把它们软链到 `/usr/bin`：
@@ -98,6 +108,14 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 IDE 大部分功能在 Wayland 下正常，但基于 CEF 的界面——项目结构对话框、Markdown 预览等——的 GPU 进程在 Wayland 下会崩溃（`eglCreateWindowSurface` 段错误）。启动器 wrapper 默认强制 X11 后端来解决（`unset WAYLAND_DISPLAY`、`GDK_BACKEND=x11`），让所有 CEF 页面通过 XWayland 正常渲染。
 
 如果你更想原生运行在 Wayland 下，可以在启动前设置 `DEVECO_DISABLE_X11_WORKAROUND=1`——但 CEF 页面会空白或异常。
+
+## HiDPI
+
+如果遇到 HiDPI 问题，请参考 [IDEA 文档](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)，或尝试此方法：在 DevEco Studio 的 vmoptions 中添加：
+
+    -Dsun.java2d.uiScale.enabled=false
+    -Dsun.java2d.hidpi.mode=off
+
 
 ## 背后做了什么
 

@@ -25,7 +25,7 @@ Always check `PKGBUILD` yourself.
 For the tested, release-quality version (of PKGBUILD),
 use a tagged release — the default branch may carry untested changes:
 
-    git checkout 26.0.0.621-2
+    git checkout 26.0.0.621-4
 
 The version in the tag is the `pkgver` in that PKGBUILD — i.e. the DevEco
 Studio version you should download below (e.g. `26.0.0.621`).
@@ -76,6 +76,24 @@ GitHub Actions:
 
 A GitHub account can use Actions for free on public repositories.
 
+### On other distributions
+
+The workflow also produces a distro-agnostic tarball
+(`devecostudio-<ver>-linux-x86_64.tar.gz`) containing the complete
+`/opt/devecostudio` tree plus `devecostudio.desktop` at the root. On
+Debian/Ubuntu/Fedora or any other Linux, extract it and set up the launcher
+manually:
+
+    sudo tar -xzf devecostudio-<ver>-linux-x86_64.tar.gz -C /opt
+    sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
+    sudo desktop-file-install /opt/devecostudio.desktop
+
+You also need the runtime dependencies (package names vary by distro):
+`libxss`, `libxtst`, `nss`, `alsa-lib`, `libxcrypt-compat`, `freetype2`,
+`libpulse`. Chinese input support needs `fcitx5`. Unlike the Arch package,
+the bundled CLI tools are not linked into `/usr/bin` — call them by full
+path under `/opt/devecostudio/tools/bin/`.
+
 ## CLI tools on PATH
 
 The IDE needs the bundled Huawei command-line tools at runtime, and they
@@ -122,6 +140,13 @@ render correctly through XWayland.
 If you prefer to run under Wayland natively, set
 `DEVECO_DISABLE_X11_WORKAROUND=1` before launching — but expect the CEF
 pages to be blank or broken.
+
+## HiDPI
+
+If you encounter HiDPI issues, please refer to [the IDEA documentation](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration) or try my workaround, by adding these to the vmoptions of Deveco Studio:
+
+    -Dsun.java2d.uiScale.enabled=false
+    -Dsun.java2d.hidpi.mode=off
 
 ## What happens under the hood
 
