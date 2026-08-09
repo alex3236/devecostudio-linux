@@ -12,12 +12,6 @@ This is an Arch Linux PKGBUILD that packages DevEco Studio (Huawei's IDE for Har
 
 It is not an official package. It is not endorsed by Huawei or JetBrains.
 
-## Features
-
-Most features of DevEco Studio should work. If you find any issues, please report them in Issues.
-
-I expect Huawei to release an official Linux version soon (almost all other components besides the IDE itself are already available on Linux), at which point this project will be archived.
-
 ## Building
 
 Always check `PKGBUILD` yourself.
@@ -120,8 +114,9 @@ Both behaviors are controlled by variables at the top of the PKGBUILD:
 
 ## Emulator
 
-The emulator works, but you must manually accept the software agreements
-and download the system images. For example:
+The emulator works, but before first use you must accept the software
+agreements and
+download the system images. For example:
 
     # List available images
     hemulator -imageList
@@ -143,7 +138,60 @@ IDE's Device Manager.
 The previewer is unavailable. Huawei has not yet ported the Rosen
 rendering engine to Linux.
 
-## Wayland
+## What happens under the hood
+
+The PKGBUILD extracts the Mac DMG and takes the platform-independent parts
+— JARs, plugins, modules. The SDK and CLI tools (hvigor, ohpm, node,
+emulator, …) come from Huawei's Linux Command Line Tools instead. Then the
+macOS-specific bits (launcher, JBR, native libraries) are replaced with
+their Linux counterparts from IntelliJ IDEA. The vmoptions and
+product-info.json are transformed on the fly so the IDE knows it's running
+on Linux.
+
+The result is a native-feeling DevEco Studio that runs without Wine or
+containers.
+
+Why repackage from the Mac version? Huawei distributes DevEco Studio for
+Windows, macOS, and Linux. The Linux distribution has two problems: the
+installer is an `.exe` that is hard to extract, and the packaged version
+lags behind in updates. The Mac DMG is trivially extractable and contains
+all the cross-platform files we need.
+
+The only truly platform-specific things we swap out are:
+- The Java runtime (JBR) — macOS → Linux
+- The native launcher binary (and `fsnotifier`)
+- Shared libraries (.so files)
+- The SDK and CLI tools — taken from the Linux Command Line Tools
+
+Everything else — the Java code, plugins, templates — is
+platform-independent.
+
+### The emulator
+
+Three emulator-related quirks deserve a mention.
+
+First, Huawei's code only
+distinguishes Mac from non-Mac, and the non-Mac branch hardcodes the
+`Emulator.exe` filename. On Linux that file does not exist, which broke the
+Device Manager and debugging. The package fixes this with a symlink:
+`Emulator.exe -> Emulator` in `tools/emulator/`.
+
+Second, system images must be downloaded manually because of how the
+official installer works: when the emulator is missing, its wizard downloads
+the binary *and* the system image together. Since this package bundles the
+binary, the IDE thinks the emulator is installed and never offers the
+wizard, leaving the system image as the only missing piece — see the
+Emulator section above for how to get one.
+
+Third, the emulator's software agreements: the IDE launches the emulator
+binary directly, and if the agreements were never accepted it waits
+silently for a `y`. The `Emulator` wrapper auto-accepts them on first use
+(`hemulator ...` when `~/Library/Caches/Huawei/Emulator26.0/.emu_config`
+does not exist runs `-license accept` and exits), so by the time you use
+the IDE the agreements are in place. To opt out of the auto-accept,
+truncate that `.emu_config` file.
+
+### Wayland
 
 Most of the IDE runs fine under Wayland, but the CEF-based user interfaces
 — the project structure dialog, markdown preview, and similar — crash their
@@ -162,62 +210,22 @@ default (equivalent to `ide.browser.jcef.headless.enabled` and
 blank CEF pages in some environments. Set `DEVECO_DISABLE_JCEF_HEADLESS=1`
 before launching to opt out.
 
-## HiDPI
+### HiDPI
 
-If you encounter HiDPI issues, please refer to [the IDEA documentation](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration) or try my workaround, by adding these to the vmoptions of Deveco Studio:
+XWayland does not report per-monitor scale to the JVM (it reports 1.0), so
+on a HiDPI screen the IDE would lock its UI scale to 1.0 — too small. The
+launcher reads the compositor's real scale (`wlr-randr`), rounds it to the
+nearest quarter step, and injects it as `-Dide.ui.scale` via a user
+vmoptions overlay.
 
-    -Dsun.java2d.uiScale.enabled=false
-    -Dsun.java2d.hidpi.mode=off
+Override the value or disable the detection:
 
-## What happens under the hood
+    DEVECO_UI_SCALE=1.2 devecostudio   # use 1.2 as-is
+    DEVECO_UI_SCALE=off devecostudio   # leave scaling to the JVM
 
-The PKGBUILD extracts the Mac DMG and takes the platform-independent parts
-— JARs, plugins, modules, tools (hvigor, ohpm, etc.). Then it replaces the
-macOS-specific bits (launcher, JBR, native libraries) with their Linux
-counterparts from IntelliJ IDEA. The vmoptions and product-info.json are
-transformed on the fly so the IDE knows it's running on Linux.
-
-The result is a native-feeling DevEco Studio that runs without Wine or
-containers.
-
-Why repackage from the Mac version? Huawei distributes DevEco Studio for
-Windows, macOS, and Linux. The Linux distribution has two problems: the
-installer is an `.exe` that is hard to extract, and the packaged version
-lags behind in updates. The Mac DMG is trivially extractable and contains
-all the cross-platform files we need.
-
-The only truly platform-specific things we swap out are:
-- The Java runtime (JBR) — macOS → Linux
-- The native launcher binary
-- Shared libraries (.so files)
-
-Everything else — the Java code, plugins, templates, build tools — is
-platform-independent.
-
-### The emulator
-
-Two emulator-related quirks deserve a mention.
-
-First, Huawei's code only
-distinguishes Mac from non-Mac, and the non-Mac branch hardcodes the
-`Emulator.exe` filename. On Linux that file does not exist, which broke the
-Device Manager and debugging. The package fixes this with a symlink:
-`Emulator.exe -> Emulator` in `tools/emulator/`.
-
-Second, system images must be downloaded manually because of how the
-official installer works: when the emulator is missing, its wizard downloads
-the binary *and* the system image together. Since this package bundles the
-binary, the IDE thinks the emulator is installed and never offers the
-wizard, leaving the system image as the only missing piece — see the
-Emulator section above for how to get one.
-
-Third, the emulator's software agreements: the IDE launches the emulator
-binary directly, and if the agreements were never accepted it waits
-silently for a `y`. The `Emulator` wrapper auto-accepts them on first use
-(`hemulator ...` when `~/.Huawei`/`~/Library/Caches/Huawei/Emulator26.0/.emu_config`
-does not exist runs `-license accept` and exits), so by the time you use
-the IDE the agreements are in place. To opt out of the auto-accept,
-truncate that `.emu_config` file.
+You can also set the scale manually via the IDE's *Help → Edit Custom VM
+Options*. For more, see [the IDEA HiDPI
+documentation](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration).
 
 ### Some magic
 

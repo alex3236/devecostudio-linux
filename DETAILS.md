@@ -213,6 +213,32 @@ XWayland/GLX and works. Opt out with `DEVECO_DISABLE_X11_WORKAROUND=1`
 (CEF pages then break). The IDE may also have persisted
 `ide.browser.jcef.gpu.disable=true` in its registry from a crash episode.
 
+### X11 / XWayland HiDPI
+
+XWayland reports monitor scale 1.0 to JBR (per-monitor RANDR info is
+missing), so with JRE-managed HiDPI the IDE locks its UI scale to 1.0 —
+too small on HiDPI screens. Two things matter:
+
+- `-Dide.ui.scale` (an IntelliJ property) forces the IDE scale; JBR's
+  `sun.java2d.uiScale` alone does not work because per-monitor mode
+  overrides it.
+- The JCEF browser scale follows the IDE scale via
+  `JBCefApp.getForceDeviceScaleFactor()`: with JRE HiDPI enabled it
+  returns -1 (Chromium auto-detects — good), otherwise it returns
+  `ScaleContext.PIX_SCALE` (the IDE scale — correct only if the IDE scale
+  is right). Disabling JRE HiDPI (`uiScale.enabled=false` +
+  `hidpi.mode=off`) therefore fixes the Swing UI but makes JCEF huge.
+
+The wrapper reads the compositor scale (`wlr-randr`; needs
+`WAYLAND_DISPLAY`, so it runs before the X11 workaround unsets it),
+rounds to the nearest quarter step, and writes a one-line user vmoptions
+overlay injected via `DEVECOSTUDIO_VM_OPTIONS`. That env var is read by
+the native launcher and merged with the system vmoptions (verified: the
+launcher reads both the main vmoptions file and the user overlay; a
+user-level `devecostudio64.vmoptions` in the config dir works the same
+way). `DEVECO_UI_SCALE` overrides the value (any number, as-is); `off`
+skips the injection and leaves scaling to the JVM.
+
 ### Permissions and executability
 
 Mac DMG files ship 700; `cp -a` preserves that, so the package does a

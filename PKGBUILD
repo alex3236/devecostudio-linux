@@ -17,7 +17,7 @@ pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=6
+pkgrel=7
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -258,24 +258,52 @@ PATCHEOF
 export _JAVA_AWT_WM_NONREPARENTING=1
 # Emulator uses the Qt xcb platform plugin (no wayland build shipped)
 export QT_QPA_PLATFORM=xcb
-# JCEF (CEF-based UI: project structure, markdown preview) crashes its GPU
-# process under Wayland (eglCreateWindowSurface segfault). Force the X11
-# backend by default; set DEVECO_DISABLE_X11_WORKAROUND=1 to keep Wayland.
+# XWayland reports monitor scale 1.0 to JBR, so the IDE locks UI scale to
+# 1.0 — too small on HiDPI. Inject the compositor's real scale (wlr-randr,
+# needs WAYLAND_DISPLAY so run it before unsetting it) as -Dide.ui.scale.
+# DEVECO_UI_SCALE: number (override, as-is) or "off" (disable).
+_hidpi_scale=""
+case "${DEVECO_UI_SCALE:-auto}" in
+  off) ;;
+  auto)
+    _cs=""
+    command -v wlr-randr >/dev/null 2>&1 && \
+      _cs=$(wlr-randr 2>/dev/null | awk '/Scale:/{print $2; exit}')
+    if [[ "$_cs" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+      _hidpi_scale=$(LC_ALL=C awk -v s="$_cs" 'BEGIN{ q=int(s*4+0.5)/4; if (q<1.0) q=1.0; printf "%.2f", q }')
+    fi
+    ;;
+  *)
+    if [[ "$DEVECO_UI_SCALE" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+      _hidpi_scale="$DEVECO_UI_SCALE"
+    else
+      printf 'Ignoring invalid DEVECO_UI_SCALE=%q (expected auto, off, or a number)\n' \
+        "$DEVECO_UI_SCALE" >&2
+    fi
+    ;;
+esac
+if [[ -n "$_hidpi_scale" ]]; then
+  _cfg="${XDG_CONFIG_HOME:-$HOME/.config}/Huawei/DevEcoStudio26.0"
+  if mkdir -p "$_cfg"; then
+    echo "-Dide.ui.scale=$_hidpi_scale" > "$_cfg/devecostudio-hidpi.vmoptions"
+    export DEVECOSTUDIO_VM_OPTIONS="$_cfg/devecostudio-hidpi.vmoptions"
+  else
+    printf 'Unable to create the HiDPI vmoptions overlay in %s\n' "$_cfg" >&2
+  fi
+fi
+# JCEF GPU process crashes under Wayland; use the X11 backend by default
+# (DEVECO_DISABLE_X11_WORKAROUND=1 to keep Wayland).
 if [[ "${DEVECO_DISABLE_X11_WORKAROUND:-0}" != "1" ]]; then
   unset WAYLAND_DISPLAY
   export GDK_BACKEND=x11
 fi
-# On some environments, all CEF pages (welcome screen, project structure,
-# markdown preview, ...) render blank even with the X11 workaround; JCEF
-# headless + out-of-process rendering fixes it. Enabled by default (the
-# registry keys check System properties first, so -D can preset them);
-# set DEVECO_DISABLE_JCEF_HEADLESS=1 to opt out.
+# JCEF headless + out-of-process rendering fixes blank CEF pages in some
+# environments (DEVECO_DISABLE_JCEF_HEADLESS=1 to opt out).
 _JCEF_ARGS=()
 if [[ "${DEVECO_DISABLE_JCEF_HEADLESS:-0}" != "1" ]]; then
   _JCEF_ARGS=("-Dide.browser.jcef.headless.enabled=true" "-Dide.browser.jcef.out-of-process.enabled=true")
 fi
-# Emulator hardcodes the macOS-style image path ~/Library/Huawei/Sdk;
-# bridge it to the Linux location so it finds system images
+# Emulator hardcodes the macOS-style image path ~/Library/Huawei/Sdk
 mkdir -p "$HOME/Library/Huawei"
 ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
 exec "$(dirname "$(readlink -f "$0")")/devecostudio" "${_JCEF_ARGS[@]}" "$@"

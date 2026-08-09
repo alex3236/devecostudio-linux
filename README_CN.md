@@ -12,12 +12,6 @@
 
 这不是官方包，也未获得华为或 JetBrains 的认可。
 
-## 功能
-
-DevEco Studio 的绝大多数功能都应正常工作。若你发现任何问题，请在 Issues 中报告。
-
-相信华为很快会发布官方的 Linux 版本（除 IDE 本体外的几乎所有其他组件都已在 Linux 上可用），届时本项目将归档。
-
 ## 构建
 
 请务必自行检查 `PKGBUILD`。
@@ -98,7 +92,7 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 ## 模拟器
 
-模拟器可用，但需手动同意协议和下载系统镜像，例如：
+模拟器可用，但首次使用前需要同意软件协议并下载系统镜像，例如：
 
 	# 查看可用镜像
 	hemulator -imageList
@@ -118,25 +112,9 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 预览器不可用。华为尚未将 Rosen 渲染引擎移植到 Linux。
 
-## Wayland
-
-IDE 大部分功能在 Wayland 下正常，但基于 CEF 的界面——项目结构对话框、Markdown 预览等——的 GPU 进程在 Wayland 下会崩溃（`eglCreateWindowSurface` 段错误）。启动器 wrapper 默认强制 X11 后端来解决（`unset WAYLAND_DISPLAY`、`GDK_BACKEND=x11`），让所有 CEF 页面通过 XWayland 正常渲染。
-
-如果你更想原生运行在 Wayland 下，可以在启动前设置 `DEVECO_DISABLE_X11_WORKAROUND=1`——但 CEF 页面会空白或异常。
-
-启动器默认还启用了 JCEF 的 headless + 子进程渲染（相当于注册表中的 `ide.browser.jcef.headless.enabled` 和 `ide.browser.jcef.out-of-process.enabled`），可解决特定环境下 CEF 页面空白的问题。如需关闭，启动前设置 `DEVECO_DISABLE_JCEF_HEADLESS=1`。
-
-## HiDPI
-
-如果遇到 HiDPI 问题，请参考 [IDEA 文档](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)，或尝试此方法：在 DevEco Studio 的 vmoptions 中添加：
-
-    -Dsun.java2d.uiScale.enabled=false
-    -Dsun.java2d.hidpi.mode=off
-
-
 ## 背后做了什么
 
-PKGBUILD 解压 Mac DMG，取出平台无关的部分——JAR、插件、modules、工具（hvigor、ohpm 等）。然后用 IntelliJ IDEA 的 Linux 对应组件替换 macOS 专属部分（启动器、JBR、原生库）。vmoptions 和 product-info.json 会在构建时动态转换，让 IDE 知道自己运行在 Linux 上。
+PKGBUILD 解压 Mac DMG，取出平台无关的部分——JAR、插件、modules。SDK 和 CLI 工具（hvigor、ohpm、node、emulator 等）则取自华为的 Linux Command Line Tools。然后用 IntelliJ IDEA 的 Linux 对应组件替换 macOS 专属部分（启动器、JBR、原生库）。vmoptions 和 product-info.json 会在构建时动态转换，让 IDE 知道自己运行在 Linux 上。
 
 最终得到一个无需 Wine 或容器即可运行的原生体验 DevEco Studio。
 
@@ -144,20 +122,40 @@ PKGBUILD 解压 Mac DMG，取出平台无关的部分——JAR、插件、module
 
 真正平台相关的、需要替换的部分只有：
 - Java 运行时（JBR）— macOS → Linux
-- 原生启动器二进制
+- 原生启动器二进制（以及 `fsnotifier`）
 - 共享库（.so 文件）
+- SDK 和 CLI 工具——取自 Linux Command Line Tools
 
-其他一切——Java 代码、插件、模板、构建工具——都是平台无关的。
+其他一切——Java 代码、插件、模板——都是平台无关的。
 
 ### 模拟器
 
-有两个与模拟器相关的问题值得说明。
+有三个与模拟器相关的问题值得说明。
 
 其一，华为的代码只区分 Mac 与非 Mac，而非 Mac 分支硬编码了 `Emulator.exe` 文件名。在 Linux 上这个文件不存在，导致 Device Manager 和调试不可用。本包通过符号链接修复：`tools/emulator/` 下的 `Emulator.exe -> Emulator`。
 
 其二，系统镜像必须手动下载，这是官方安装器的工作方式决定的：当模拟器缺失时，其向导会同时下载二进制和系统镜像。由于本包已内置二进制，IDE 认为模拟器已安装、从不弹出向导，系统镜像成了唯一缺失的部分——获取方式见上文"模拟器"一节。
 
 其三，模拟器的软件协议：IDE 直接启动模拟器二进制，如果协议从未被同意，它会静默等待输入 `y`。`Emulator` 包装器在首次使用时自动同意（当 `~/Library/Caches/Huawei/Emulator26.0/.emu_config` 不存在时，执行 `hemulator ...` 会运行 `-license accept` 并退出），因此当你在 IDE 中使用时协议已经就绪。如需退出自动同意，请清空该 `.emu_config` 文件。
+
+### Wayland
+
+IDE 大部分功能在 Wayland 下正常，但基于 CEF 的界面——项目结构对话框、Markdown 预览等——的 GPU 进程在 Wayland 下会崩溃（`eglCreateWindowSurface` 段错误）。启动器 wrapper 默认强制 X11 后端来解决（`unset WAYLAND_DISPLAY`、`GDK_BACKEND=x11`），让所有 CEF 页面通过 XWayland 正常渲染。
+
+如果你更想原生运行在 Wayland 下，可以在启动前设置 `DEVECO_DISABLE_X11_WORKAROUND=1`——但 CEF 页面会空白或异常。
+
+启动器默认还启用了 JCEF 的 headless + 子进程渲染（相当于注册表中的 `ide.browser.jcef.headless.enabled` 和 `ide.browser.jcef.out-of-process.enabled`），可解决特定环境下 CEF 页面空白的问题。如需关闭，启动前设置 `DEVECO_DISABLE_JCEF_HEADLESS=1`。
+
+### HiDPI
+
+XWayland 不会向 JVM 报告 per-monitor 缩放（它报告 1.0），因此在 HiDPI 屏幕上 IDE 会把 UI 缩放锁定为 1.0——太小。启动器会读取合成器的真实缩放（`wlr-randr`），四舍五入到最近的 0.25 步，并通过用户级 vmoptions 覆盖文件以 `-Dide.ui.scale` 注入。
+
+覆盖值或禁用检测：
+
+    DEVECO_UI_SCALE=1.2 devecostudio   # 直接使用 1.2
+    DEVECO_UI_SCALE=off devecostudio   # 把缩放交给 JVM
+
+你也可以通过 IDE 的 *Help → Edit Custom VM Options* 手动设置缩放。更多信息请参考 [IDEA HiDPI 文档](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)。
 
 ### 一些魔法
 
