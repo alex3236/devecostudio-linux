@@ -90,9 +90,10 @@ manually:
 
 You also need the runtime dependencies (package names vary by distro):
 `libxss`, `libxtst`, `nss`, `alsa-lib`, `libxcrypt-compat`, `freetype2`,
-`libpulse`. Chinese input support needs `fcitx5`. Unlike the Arch package,
-the bundled CLI tools are not linked into `/usr/bin` — call them by full
-path under `/opt/devecostudio/tools/bin/`.
+`libpulse`. Chinese input support needs `fcitx5`; automatic X11 HiDPI
+detection needs `xrdb`. Unlike the Arch package, the bundled CLI tools are
+not linked into `/usr/bin` — call them by full path under
+`/opt/devecostudio/tools/bin/`.
 
 ## CLI tools on PATH
 
@@ -149,10 +150,25 @@ before launching to opt out.
 
 ## HiDPI
 
-If you encounter HiDPI issues, please refer to [the IDEA documentation](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration) or try my workaround, by adding these to the vmoptions of Deveco Studio:
+The default X11 workaround also stabilizes HiDPI scaling across IDE restarts.
+It switches JBR to IDE-managed scaling and, when `xrdb` is installed, derives
+the scale from `Xft.dpi` and rounds it to the nearest quarter step. Automatic
+mode applies only when `Xft.dpi` reports at least 120 DPI (1.25x); otherwise
+the launcher leaves scaling unchanged.
 
-    -Dsun.java2d.uiScale.enabled=false
-    -Dsun.java2d.hidpi.mode=off
+Override the detected value when needed:
+
+    DEVECO_UI_SCALE=2.0 devecostudio
+
+Custom VM options selected from the IDE are preserved in the generated
+overlay under the DevEco Studio configuration directory and survive later
+launches.
+Use `DEVECO_UI_SCALE=off` to disable only the HiDPI injection; the separate
+X11 workaround remains active. A fixed scale cannot dynamically follow
+mixed-DPI monitors under XWayland; use native Wayland mode if per-monitor
+scaling matters and the known JCEF limitations are acceptable.
+See the [IDEA HiDPI documentation](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)
+for background on IDE- and JRE-managed scaling.
 
 ## What happens under the hood
 

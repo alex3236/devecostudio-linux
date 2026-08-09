@@ -17,7 +17,7 @@ pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=5
+pkgrel=6
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -40,6 +40,7 @@ depends=(
 )
 optdepends=(
   'fcitx5: Chinese input method support for JBR JCEF'
+  'xorg-xrdb: automatic X11 HiDPI scale detection'
 )
 makedepends=('jq' 'p7zip')
 options=('!strip')
@@ -244,6 +245,77 @@ export QT_QPA_PLATFORM=xcb
 if [[ "${DEVECO_DISABLE_X11_WORKAROUND:-0}" != "1" ]]; then
   unset WAYLAND_DISPLAY
   export GDK_BACKEND=x11
+
+  # JBR 25 can switch unpredictably between JRE- and IDE-managed HiDPI on
+  # fractional-DPI XWayland sessions. NotRoamableUiSettings may then reset
+  # the UI and JCEF scale to 1.0 after a restart. Use the stable legacy mode
+  # and lock the IDE scale to Xft.dpi. DEVECO_UI_SCALE accepts a numeric
+  # override, "auto" (default), or "off" to keep the original behaviour.
+  deveco_ui_scale="${DEVECO_UI_SCALE:-auto}"
+  case "$deveco_ui_scale" in
+    off)
+      deveco_ui_scale=""
+      ;;
+    auto)
+      deveco_ui_scale=""
+      if command -v xrdb >/dev/null 2>&1 && command -v awk >/dev/null 2>&1; then
+        xft_dpi="$(xrdb -query 2>/dev/null | awk 'tolower($1) == "xft.dpi:" { print $2; exit }')"
+        if [[ "$xft_dpi" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+          # Match IntelliJ's quarter-step UI scales (1.25, 1.50, 1.75...).
+          deveco_ui_scale="$(LC_ALL=C awk -v dpi="$xft_dpi" 'BEGIN {
+            scale = dpi / 96
+            if (scale >= 1.25) printf "%.2f", int(scale * 4 + 0.5) / 4
+          }')"
+        fi
+      fi
+      ;;
+    *)
+      if [[ ! "$deveco_ui_scale" =~ ^([1-9][0-9]*([.][0-9]+)?|0[.][0-9]*[1-9][0-9]*)$ ]]; then
+        printf 'Ignoring invalid DEVECO_UI_SCALE=%q (expected auto, off, or a positive number)\n' \
+          "$deveco_ui_scale" >&2
+        deveco_ui_scale=""
+      fi
+      ;;
+  esac
+
+  if [[ -n "$deveco_ui_scale" ]]; then
+    ide_bin_dir="$(dirname "$(readlink -f "$0")")"
+    ide_home="$(dirname "$ide_bin_dir")"
+    config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+    hidpi_dir="$config_home/Huawei/DevEcoStudio26.0"
+    hidpi_vmoptions="$hidpi_dir/devecostudio-x11-hidpi.vmoptions"
+    existing_vmoptions="${DEVECOSTUDIO_VM_OPTIONS:-}"
+
+    if [[ -z "$existing_vmoptions" ]]; then
+      for candidate in \
+        "$hidpi_vmoptions" \
+        "${ide_home}.vmoptions" \
+        "$config_home/Huawei/DevEcoStudio26.0/devecostudio64.vmoptions" \
+        "$config_home/Huawei/DevEcoStudio26.0/devecostudio64-lin.vmoptions"; do
+        if [[ -r "$candidate" ]]; then
+          existing_vmoptions="$candidate"
+          break
+        fi
+      done
+    fi
+
+    if mkdir -p "$hidpi_dir" && hidpi_tmp="$(mktemp "$hidpi_vmoptions.XXXXXX")"; then
+      if [[ -n "$existing_vmoptions" && -r "$existing_vmoptions" ]]; then
+        grep -E -v '^-D(sun\.java2d\.(uiScale(\.enabled)?|hidpi\.mode)|ide\.ui\.scale)=' \
+          "$existing_vmoptions" > "$hidpi_tmp" || true
+      fi
+      printf '%s\n' '-Dsun.java2d.uiScale.enabled=false' >> "$hidpi_tmp"
+      printf '%s\n' "-Dide.ui.scale=$deveco_ui_scale" >> "$hidpi_tmp"
+      if mv -f "$hidpi_tmp" "$hidpi_vmoptions"; then
+        export DEVECOSTUDIO_VM_OPTIONS="$hidpi_vmoptions"
+      else
+        rm -f "$hidpi_tmp"
+      fi
+    else
+      printf 'Unable to create the DevEco Studio HiDPI vmoptions overlay in %s\n' \
+        "$hidpi_dir" >&2
+    fi
+  fi
 fi
 # On some environments, all CEF pages (welcome screen, project structure,
 # markdown preview, ...) render blank even with the X11 workaround; JCEF

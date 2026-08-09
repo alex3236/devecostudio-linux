@@ -154,6 +154,21 @@ XWayland/GLX and works. Opt out with `DEVECO_DISABLE_X11_WORKAROUND=1`
 (CEF pages then break). The IDE may also have persisted
 `ide.browser.jcef.gpu.disable=true` in its registry from a crash episode.
 
+### X11 / XWayland HiDPI stability
+
+JBR 25 can initialize HiDPI in a different order across XWayland launches.
+On a fractional-scale desktop this lets `NotRoamableUiSettings` reset the
+IntelliJ user scale and JCEF device scale to `1.0` after a restart. The
+wrapper uses IDE-managed scaling (`sun.java2d.uiScale.enabled=false`) and
+locks `ide.ui.scale` to `Xft.dpi / 96`, rounded to the nearest quarter step.
+`DEVECO_UI_SCALE` accepts a numeric override, `auto` (default), or `off`.
+
+The generated user-vmoptions overlay lives below
+`$XDG_CONFIG_HOME/Huawei/DevEcoStudio26.0/`. The native launcher still loads
+the bundled defaults, so they must not be copied into the overlay. The
+overlay is reused as the next launch's source before scale keys are replaced;
+this preserves options added through the IDE's VM-options editor.
+
 ### Permissions and executability
 
 Mac DMG files ship 700; `cp -a` preserves that, so the package does a
@@ -220,8 +235,10 @@ The wrapper (devecostudio.sh) responsibilities, in order:
 1. `_JAVA_AWT_WM_NONREPARENTING=1`
 2. `QT_QPA_PLATFORM=xcb` (emulator Qt)
 3. X11 backend for JCEF unless `DEVECO_DISABLE_X11_WORKAROUND=1`
-4. `~/Library/Huawei/Sdk` → `~/.Huawei/Sdk` bridge (emulator images)
-5. exec the real launcher via `readlink -f` on `$0` (works through the
+4. JCEF headless + out-of-process mode unless `DEVECO_DISABLE_JCEF_HEADLESS=1`
+5. stable X11 HiDPI scale, configurable with `DEVECO_UI_SCALE`
+6. `~/Library/Huawei/Sdk` → `~/.Huawei/Sdk` bridge (emulator images)
+7. exec the real launcher via `readlink -f` on `$0` (works through the
    `/usr/bin` symlink)
 
 ## Maintenance checklist
@@ -245,6 +262,8 @@ The wrapper (devecostudio.sh) responsibilities, in order:
 - [ ] `devecostudio --version` prints the right build
 - [ ] Project opens; hvigor **sync** succeeds (no Node.js path warning)
 - [ ] CEF UI works: project structure dialog, markdown preview
+- [ ] HiDPI and JCEF scales stay unchanged across two cold starts
+- [ ] A VM option added through the IDE survives the second cold start
 - [ ] Device Manager: emulator list loads; create/start/stop/edit/delete
 - [ ] Debugging from the run panel (emulator started via CLI or IDE)
 - [ ] All five CLI tools: `hvigorw --version`, `ohpm --version`,

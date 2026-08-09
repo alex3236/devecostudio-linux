@@ -76,7 +76,7 @@ GitHub 账户在公共仓库上可以免费使用 Actions。
     sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
     sudo desktop-file-install /opt/devecostudio.desktop
 
-还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`。中文输入支持需要 `fcitx5`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
+还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`。中文输入支持需要 `fcitx5`，自动检测 X11 HiDPI 倍率需要 `xrdb`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
 
 ## PATH 上的 CLI 工具
 
@@ -113,10 +113,22 @@ IDE 大部分功能在 Wayland 下正常，但基于 CEF 的界面——项目�
 
 ## HiDPI
 
-如果遇到 HiDPI 问题，请参考 [IDEA 文档](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)，或尝试此方法：在 DevEco Studio 的 vmoptions 中添加：
+默认的 X11 兼容模式现在也会稳定 IDE 重启前后的 HiDPI 缩放。启动器会切换到
+IDE-managed 缩放；安装了 `xrdb` 时，还会从 `Xft.dpi` 读取倍率并四舍五入到
+最接近的 0.25 倍。自动模式只在 `Xft.dpi` 至少为 120 DPI（1.25 倍）时生效；
+否则启动器保持原来的缩放行为。
 
-    -Dsun.java2d.uiScale.enabled=false
-    -Dsun.java2d.hidpi.mode=off
+需要时可以手动覆盖检测值：
+
+    DEVECO_UI_SCALE=2.0 devecostudio
+
+通过 IDE 设置的自定义 VM options 会保存在 DevEco Studio 配置目录中的生成层里，
+后续启动不会将其覆盖丢失。
+使用 `DEVECO_UI_SCALE=off` 只关闭 HiDPI 参数注入，独立的 X11 兼容处理仍然
+生效。XWayland 下固定倍率无法在不同 DPI 的显示器之间动态切换；如果必须使用
+逐显示器缩放，可以改用原生 Wayland 模式，但需要接受前述 JCEF 限制。
+IDE-managed 与 JRE-managed 缩放的背景说明
+参见 [IDEA HiDPI 文档](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)。
 
 
 ## 背后做了什么
