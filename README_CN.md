@@ -18,7 +18,9 @@
 
 要使用经过测试的 PKGBUILD，请使用已打 tag 的版本——默认分支可能包含未测试的改动：
 
-    git checkout 26.0.0.621-6
+    git checkout <latest-tag>
+
+（将 `<latest-tag>` 替换为最新 tag，例如 `26.0.0.621-7`——可用 `git tag` 查看）。
 
 Tag 名中的版本号也是该 PKGBUILD 的 `pkgver`，即下方需要下载的 DevEco Studio 版本（例如 `26.0.0.621`）。
 
