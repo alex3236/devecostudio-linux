@@ -17,7 +17,7 @@ pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=5
+pkgrel=6
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -212,6 +212,26 @@ VMEOF
   # rewrite them to our actual layout instead of adding symlinks that
   # could confuse the IDE's node discovery.
   sed -i 's|\$ROOT_PATH/tool/node|\$ROOT_PATH/node|; s|\$ROOT_PATH/sdk|\$ROOT_PATH/../sdk|' "$_pkg/tools/codelinter/bin/codelinter"
+  # Emulator wrapper additions: bridge the macOS-style image path symlink,
+  # and auto-accept the software agreements on first use so the IDE never
+  # hangs silently waiting for a 'y' (the IDE launches the emulator binary
+  # directly, bypassing this wrapper, so the agreements must already be
+  # accepted). When .emu_config is missing we run `-license accept` only
+  # (the requested command is not forwarded) and print how to opt out.
+  cat > "$srcdir/emulator-wrapper-patch.sh" << 'PATCHEOF'
+mkdir -p "$HOME/Library/Huawei"
+ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
+_emu_config="$HOME/Library/Caches/Huawei/Emulator26.0/.emu_config"
+if [[ ! -f "$_emu_config" ]]; then
+    echo "Emulator software agreements not yet accepted. Displaying and accepting them now..."
+    "$all_tool_dir/emulator/Emulator" -license accept
+    echo ""
+    echo "Re-run your command to proceed."
+    echo "To opt out: truncate $_emu_config."
+    exit 0
+fi
+PATCHEOF
+  sed -i '/"$all_tool_dir\/emulator\/Emulator" "\$@"/r '"$srcdir/emulator-wrapper-patch.sh" "$_pkg/tools/bin/Emulator"
   if [[ "$_expose_cli_tools" == "true" ]]; then
     mkdir -p "$pkgdir/usr/bin"
     # Huawei-specific names: expose as-is

@@ -24,7 +24,7 @@ DevEco Studio 的绝大多数功能都应正常工作。若你发现任何问题
 
 要使用经过测试的 PKGBUILD，请使用已打 tag 的版本——默认分支可能包含未测试的改动：
 
-    git checkout 26.0.0.621-5
+    git checkout 26.0.0.621-6
 
 Tag 名中的版本号也是该 PKGBUILD 的 `pkgver`，即下方需要下载的 DevEco Studio 版本（例如 `26.0.0.621`）。
 
@@ -98,10 +98,25 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 ## 模拟器
 
-模拟器可用，但需手动下载系统镜像：
+模拟器可用，但需手动同意协议和下载系统镜像，例如：
 
-- 用命令行下载（无需华为账号）：`hemulator -install -deviceType phone -osVersion "<版本>"`（`hemulator -imageList` 查看可用版本），或
-- 从其他平台的 DevEco Studio 安装中把 `system-image/` 目录复制到 `~/.Huawei/Sdk/system-image/`。
+	# 查看可用镜像
+	hemulator -imageList
+    
+    # 只查看手机镜像
+    hemulator -imageList -deviceType phone
+    
+    # 使用 jq 以获得简洁输出
+    hemulator -imageList -deviceType phone | jq '.[].osVersion'
+	
+    # 安装镜像
+	hemulator -install -deviceType phone -osVersion "HarmonyOS 6.1.1(24)"
+
+安装完成后，即可在 IDE 的设备管理器中创建、管理和启动模拟器。
+
+## 预览器
+
+预览器不可用。华为尚未将 Rosen 渲染引擎移植到 Linux。
 
 ## Wayland
 
@@ -141,6 +156,8 @@ PKGBUILD 解压 Mac DMG，取出平台无关的部分——JAR、插件、module
 其一，华为的代码只区分 Mac 与非 Mac，而非 Mac 分支硬编码了 `Emulator.exe` 文件名。在 Linux 上这个文件不存在，导致 Device Manager 和调试不可用。本包通过符号链接修复：`tools/emulator/` 下的 `Emulator.exe -> Emulator`。
 
 其二，系统镜像必须手动下载，这是官方安装器的工作方式决定的：当模拟器缺失时，其向导会同时下载二进制和系统镜像。由于本包已内置二进制，IDE 认为模拟器已安装、从不弹出向导，系统镜像成了唯一缺失的部分——获取方式见上文"模拟器"一节。
+
+其三，模拟器的软件协议：IDE 直接启动模拟器二进制，如果协议从未被同意，它会静默等待输入 `y`。`Emulator` 包装器在首次使用时自动同意（当 `~/Library/Caches/Huawei/Emulator26.0/.emu_config` 不存在时，执行 `hemulator ...` 会运行 `-license accept` 并退出），因此当你在 IDE 中使用时协议已经就绪。如需退出自动同意，请清空该 `.emu_config` 文件。
 
 ### 一些魔法
 

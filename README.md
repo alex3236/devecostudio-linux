@@ -25,7 +25,7 @@ Always check `PKGBUILD` yourself.
 For the tested, release-quality version (of PKGBUILD),
 use a tagged release — the default branch may carry untested changes:
 
-    git checkout 26.0.0.621-5
+    git checkout 26.0.0.621-6
 
 The version in the tag is the `pkgver` in that PKGBUILD — i.e. the DevEco
 Studio version you should download below (e.g. `26.0.0.621`).
@@ -120,13 +120,28 @@ Both behaviors are controlled by variables at the top of the PKGBUILD:
 
 ## Emulator
 
-The emulator works, but you must download system images manually:
+The emulator works, but you must manually accept the software agreements
+and download the system images. For example:
 
-- From the CLI: `hemulator -install -deviceType
-  phone -osVersion "<version>"` (list versions with `hemulator -imageList`),
-  or
-- Copy the `system-image/` folder from an existing DevEco Studio
-  installation on another platform into `~/.Huawei/Sdk/system-image/`.
+    # List available images
+    hemulator -imageList
+
+    # Phone images only
+    hemulator -imageList -deviceType phone
+
+    # Use jq for a concise list
+    hemulator -imageList -deviceType phone | jq '.[].osVersion'
+
+    # Install an image
+    hemulator -install -deviceType phone -osVersion "HarmonyOS 6.1.1(24)"
+
+Once installed, you can create, manage and start emulators from the
+IDE's Device Manager.
+
+## Previewer
+
+The previewer is unavailable. Huawei has not yet ported the Rosen
+rendering engine to Linux.
 
 ## Wayland
 
@@ -195,6 +210,14 @@ the binary *and* the system image together. Since this package bundles the
 binary, the IDE thinks the emulator is installed and never offers the
 wizard, leaving the system image as the only missing piece — see the
 Emulator section above for how to get one.
+
+Third, the emulator's software agreements: the IDE launches the emulator
+binary directly, and if the agreements were never accepted it waits
+silently for a `y`. The `Emulator` wrapper auto-accepts them on first use
+(`hemulator ...` when `~/.Huawei`/`~/Library/Caches/Huawei/Emulator26.0/.emu_config`
+does not exist runs `-license accept` and exits), so by the time you use
+the IDE the agreements are in place. To opt out of the auto-accept,
+truncate that `.emu_config` file.
 
 ### Some magic
 

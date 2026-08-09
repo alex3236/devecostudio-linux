@@ -54,8 +54,67 @@ or copied from another platform's install into `~/.Huawei/Sdk/system-image/`.
 The emulator binary hardcodes the macOS-style user path
 `~/Library/Huawei/Sdk` for system images. The launcher wrapper bridges it:
 `ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"` on every start.
+The same bridge is added to the `Emulator` CLI wrapper (in
+`tools/bin/Emulator`) so CLI-only users who never launch the IDE still get
+working image paths.
 The emulator also needs `QT_QPA_PLATFORM=xcb` (it ships only the xcb Qt
 platform plugin — no Wayland build), set by the wrapper.
+
+### Emulator software agreements (auto-accept)
+
+The IDE launches the emulator **binary directly**, bypassing the CLI
+wrapper. If the HarmonyOS software agreements were never accepted, the
+emulator silently waits for a `y` on stdin and the IDE appears hung — the
+classic "starts only after you've run the CLI once" trap.
+
+The agreement state lives in `~/Library/Caches/Huawei/Emulator26.0/.emu_config`
+(written by `Emulator -license accept`). The `Emulator` wrapper therefore
+does:
+
+```bash
+_emu_config="$HOME/Library/Caches/Huawei/Emulator26.0/.emu_config"
+if [[ ! -f "$_emu_config" ]]; then
+    "$all_tool_dir/emulator/Emulator" -license accept
+    exit 0   # original command not forwarded; re-run it
+fi
+```
+
+Only **existence** is checked, not content — so users can opt out of the
+auto-accept by truncating the file (`> .emu_config`), which makes the
+wrapper pass through and let the emulator handle agreements itself. Note
+`-license` itself always prompts regardless of state (it is not a status
+query), and `-license accept` prints every agreement before finishing, so
+it takes a while.
+
+### Previewer: unavailable on Linux (how we know)
+
+The previewer (on-device preview) is the one major feature that cannot
+work on Linux. The reasons were found by disassembling the CLI's
+`Previewer` ELF (`sdk/default/openharmony/previewer/common/bin/Previewer`),
+not by guessing:
+
+1. `strings` shows the smoking gun: `JsApp::Run ability start
+   failed.Linux is not supported.`, and `objdump -d` reveals the failure
+   is **compiled in**, not a runtime check — `RunDebugAbility` is a
+   45-byte stub that only calls `PrintLog` with that message, while
+   `RunNormalAbility` next to it is a full 1302-byte implementation.
+   The debug path (which the IDE always uses, passing `-d`)
+   was `#ifdef`-ed out of the Linux build.
+2. The branch is chosen at runtime: `RunJsApp` reads a debug flag
+   (`cmpb 0xaa(%r14)`), set from the command line via
+   `CommandParser::IsSet("d")` → `JsApp::SetIsDebug(true)`.
+3. Removing `-d` from the command line (so `RunNormalAbility` runs)
+   makes it crash instead: SIGSEGV inside `RSUIContextManager`'s
+   constructor, reached via `Window::Create → RSUIDirector::Init`.
+   That is the Rosen **render-service client** — a system service that
+   only exists on HarmonyOS devices, not on desktop Linux.
+
+So the previewer is doubly blocked upstream: debug preview is compiled
+out, and the non-debug path dies in the render-service client. Neither
+can be fixed by packaging. (A red herring first: the previewer also
+fails to load `libshared_libz.so` / `libhilog.so` — the CLI ships
+`libhilog_linux.so` and no zlib shim — but adding those only gets the
+engine to the point where it prints "Linux is not supported".)
 
 ### Node.js layout (three symlinks, no real-file copy)
 
