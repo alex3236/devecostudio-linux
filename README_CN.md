@@ -24,7 +24,7 @@ DevEco Studio 的绝大多数功能都应正常工作。若你发现任何问题
 
 要使用经过测试的 PKGBUILD，请使用已打 tag 的版本——默认分支可能包含未测试的改动：
 
-    git checkout 26.0.0.621-4
+    git checkout 26.0.0.621-5
 
 Tag 名中的版本号也是该 PKGBUILD 的 `pkgver`，即下方需要下载的 DevEco Studio 版本（例如 `26.0.0.621`）。
 

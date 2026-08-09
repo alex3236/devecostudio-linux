@@ -25,7 +25,7 @@ Always check `PKGBUILD` yourself.
 For the tested, release-quality version (of PKGBUILD),
 use a tagged release — the default branch may carry untested changes:
 
-    git checkout 26.0.0.621-4
+    git checkout 26.0.0.621-5
 
 The version in the tag is the `pkgver` in that PKGBUILD — i.e. the DevEco
 Studio version you should download below (e.g. `26.0.0.621`).
