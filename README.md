@@ -141,6 +141,12 @@ If you prefer to run under Wayland natively, set
 `DEVECO_DISABLE_X11_WORKAROUND=1` before launching — but expect the CEF
 pages to be blank or broken.
 
+The launcher also enables JCEF's headless + out-of-process rendering by
+default (equivalent to `ide.browser.jcef.headless.enabled` and
+`ide.browser.jcef.out-of-process.enabled` in the registry), which fixes
+blank CEF pages in some environments. Set `DEVECO_DISABLE_JCEF_HEADLESS=1`
+before launching to opt out.
+
 ## HiDPI
 
 If you encounter HiDPI issues, please refer to [the IDEA documentation](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration) or try my workaround, by adding these to the vmoptions of Deveco Studio:

@@ -109,6 +109,8 @@ IDE 大部分功能在 Wayland 下正常，但基于 CEF 的界面——项目�
 
 如果你更想原生运行在 Wayland 下，可以在启动前设置 `DEVECO_DISABLE_X11_WORKAROUND=1`——但 CEF 页面会空白或异常。
 
+启动器默认还启用了 JCEF 的 headless + 子进程渲染（相当于注册表中的 `ide.browser.jcef.headless.enabled` 和 `ide.browser.jcef.out-of-process.enabled`），可解决特定环境下 CEF 页面空白的问题。如需关闭，启动前设置 `DEVECO_DISABLE_JCEF_HEADLESS=1`。
+
 ## HiDPI
 
 如果遇到 HiDPI 问题，请参考 [IDEA 文档](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)，或尝试此方法：在 DevEco Studio 的 vmoptions 中添加：

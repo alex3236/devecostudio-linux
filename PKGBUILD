@@ -17,7 +17,7 @@ pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=4
+pkgrel=5
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -245,11 +245,20 @@ if [[ "${DEVECO_DISABLE_X11_WORKAROUND:-0}" != "1" ]]; then
   unset WAYLAND_DISPLAY
   export GDK_BACKEND=x11
 fi
+# On some environments, all CEF pages (welcome screen, project structure,
+# markdown preview, ...) render blank even with the X11 workaround; JCEF
+# headless + out-of-process rendering fixes it. Enabled by default (the
+# registry keys check System properties first, so -D can preset them);
+# set DEVECO_DISABLE_JCEF_HEADLESS=1 to opt out.
+_JCEF_ARGS=()
+if [[ "${DEVECO_DISABLE_JCEF_HEADLESS:-0}" != "1" ]]; then
+  _JCEF_ARGS=("-Dide.browser.jcef.headless.enabled=true" "-Dide.browser.jcef.out-of-process.enabled=true")
+fi
 # Emulator hardcodes the macOS-style image path ~/Library/Huawei/Sdk;
 # bridge it to the Linux location so it finds system images
 mkdir -p "$HOME/Library/Huawei"
 ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
-exec "$(dirname "$(readlink -f "$0")")/devecostudio" "$@"
+exec "$(dirname "$(readlink -f "$0")")/devecostudio" "${_JCEF_ARGS[@]}" "$@"
 SHEOF
   chmod +x "$_pkg/bin/devecostudio.sh"
 
