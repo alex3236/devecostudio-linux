@@ -358,6 +358,69 @@ deleted locally.)
 Mac-only tool in the DMG (Python, cross-platform). Comes from the DMG, not
 the CLI.
 
+### Dual SDK: 26.0.0 Beta vs 6.1.1 Release
+
+DevEco 26.0.0's SDK components ship as Beta2 (`releaseType: Beta2` in the
+`oh-uni-package.json` / `uni-package.json` metadata), so `pack.info` and
+`module.json` of built artifacts declare `Beta2`. Until 26.0.0 goes stable,
+app submission may require a Release SDK, so the package supports building
+against an additional 6.1.1 (or any other) Release SDK, switchable per
+project via `compileSdkVersion`.
+
+**Why the metadata edits failed (don't try again):**
+
+- Editing only `releaseType` in the component metadata has no effect because
+  hvigor's daemon caches component data, and the value is read from several
+  places (`sdk-pkg.json`, `openharmony/*/oh-uni-package.json`,
+  `hms/*/uni-package.json`).
+- Editing the version numbers too (`26.0.0.32` → `6.1.1.125`) breaks
+  version matching: `HosSdkInfoHandler.getLocalSdks()` filters local
+  components by `HosSdkVersion.equals(compileSdkVersion-derived)`; a
+  mismatch yields `SDK component missing`.
+
+**The one real blocker and its patch:**
+
+hvigor 26.0.0 validates the project's `compileSdkVersion` against
+`VersionConst.SUPPORT_COMPILE_VERSION` (= `"26.0.0"`) in
+`ValidateUtil.integrationVersionCheck()` (`validate-util.js`), rejecting
+anything else with `UNSUPPORTED_COMPILESDKVERSION`. The PKGBUILD neutralizes
+exactly that one check with a Python string replacement (the check's
+`printErrorExit` becomes `||void 0`). Backup of the pristine file:
+`hvigor-patch-backup/validate-util.js.orig-26.0.0` in the repo root.
+
+With the check gone, hvigor scans the whole SDK root
+(`/opt/devecostudio/sdk/`) for components of any version and selects the
+set whose `HosSdkVersion` matches the project's `compileSdkVersion`. The
+artifact's `releaseType` then follows the *selected SDK's own* metadata
+(6.1.1 → `Release`, 26.0.0 → `Beta2`) — no `getReleaseType` patch needed.
+
+**Installing the extra SDK** — `bin/install-extra-sdk.sh` (bundled, not on
+PATH): extracts `sdk/default/{openharmony,hms,sdk-pkg.json}` from a Huawei
+commandline-tools zip, reads the SDK's `data.path` (e.g. `HarmonyOS-6.1.1`)
+from `sdk-pkg.json` to name the destination directory, and copies it under
+`/opt/devecostudio/sdk/<path>` with sudo. The directory name comes from the
+zip, so the same script works for any future version. Note the `-x!`/include
+list: only `openharmony`, `hms`, `sdk-pkg.json` are installed — no other
+SDK channels.
+
+**Verified behavior** (26.0.0.621-9):
+
+| project compileSdkVersion | SDK used | artifact |
+|---|---|---|
+| `'6.1.1(24)'` | HarmonyOS-6.1.1 | `Release`, compileSdkVersion 6.1.1.125 |
+| `'26.0.0'` (or unset) | default | `Beta2`, compileSdkVersion 26.0.0.32 |
+
+**Caveats:**
+
+- After a package upgrade, restart any running hvigor daemon
+  (`pkill -f daemon-process-boot-script`) or the old (unpatched) code stays
+  in memory.
+- Code using API 26-only interfaces (e.g. `@ohos.multimedia.camera`
+  `VideoSession`/`PhotoSession` — 26.0.0 made `VideoSession` a superset of
+  `PhotoSession`; 6.1.1's `VideoSession` lacks the 5 manual-control mixins)
+  won't compile against 6.1.1; widen the declared type (e.g. `PhotoSession`
+  → `VideoSession`) or guard the calls.
+
 ## Runtime layout (installed)
 
 ```

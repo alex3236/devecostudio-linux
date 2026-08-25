@@ -131,6 +131,36 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 </td></tr></thead></table>
 </details>
 
+### Release SDK
+
+此分支 IDE 为 26.0.0（Beta2）。在其成为正式版之前，应用上架可能要求使用正式版（Release）SDK 编译。
+
+可以额外安装 6.1.1 或其他版本的 Release SDK，按项目切换使用。
+
+<details>
+<summary><b>怎么做？</b></summary>
+<br><table><thead><tr><td>
+
+1. 下载相应的 CLI 工具包；
+2. 通过以下命令安装 SDK 至 IDE 目录：
+    ```shell
+    # 从华为 CLI zip 安装 SDK（需要 sudo）
+    sudo /opt/devecostudio/bin/install-extra-sdk.sh /commandline-tools-linux-x64-6.1.1.280.zip
+    ```
+
+3. 在你的项目中设置编译 SDK：
+    ```json5
+    "compileSdkVersion": "6.1.1(24)",
+    "targetSdkVersion": "6.1.1(24)"
+    ```
+
+</td></tr></thead></table>
+
+包内已对 hvigor 打补丁，接受任意 `compileSdkVersion`；产物的 `releaseType` 跟随编译所用 SDK（6.1.1 → `Release`，26.0.0 → `Beta2`）。升级软件包后，若 hvigor 守护进程仍在运行，需重启（`pkill -f daemon-process-boot-script`）补丁才能生效。
+
+注意：使用了 API 26 独有接口的源码（如新版相机 API）无法用 6.1.1 编译，需要相应调整或防护。
+</details>
+
 ### 模拟器
 
 模拟器可用，但首次使用前需要通过命令行同意软件协议并下载系统镜像。

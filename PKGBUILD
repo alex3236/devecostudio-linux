@@ -17,7 +17,7 @@ pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=8
+pkgrel=9
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -160,6 +160,57 @@ package() {
 
   # idea.properties (cross-platform, use as-is)
   cp -a "$_mac/bin/idea.properties" "$_pkg/bin/"
+
+  msg2 "Writing install-extra-sdk.sh (SDK switcher, not on PATH)..."
+  # Installs an additional HarmonyOS SDK (e.g. 6.1.1 Release) from a Huawei
+  # commandline-tools zip into sdk/<path>, alongside the bundled 26.0.0 Beta
+  # SDK. hvigor picks the SDK by the project's compileSdkVersion, so projects
+  # can build against either. Not symlinked into /usr/bin on purpose.
+  cat > "$_pkg/bin/install-extra-sdk.sh" << 'SDKEOF'
+#!/bin/bash
+# Install an additional HarmonyOS SDK (e.g. 6.1.1 Release) from a Huawei
+# command-line-tools zip into /opt/devecostudio/sdk/, alongside the bundled
+# 26.0.0 Beta SDK. hvigor then picks the SDK by the project's
+# compileSdkVersion — see the README "Release SDK" section.
+# Usage: install-extra-sdk.sh /path/to/commandline-tools-linux-x64-<ver>.zip
+set -euo pipefail
+
+ZIP="${1:-}"
+if [[ -z "$ZIP" || ! -f "$ZIP" ]]; then
+  echo "Usage: $(basename "$0") <commandline-tools-*.zip>" >&2
+  exit 1
+fi
+command -v 7z >/dev/null || { echo "7z is required" >&2; exit 1; }
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+echo "Extracting SDK components from $ZIP ..."
+7z x -y "$ZIP" \
+  "command-line-tools/sdk/default/openharmony" \
+  "command-line-tools/sdk/default/hms" \
+  "command-line-tools/sdk/default/sdk-pkg.json" -o"$TMP" >/dev/null
+SRC="$TMP/command-line-tools/sdk/default"
+[[ -d "$SRC/openharmony" ]] || { echo "No SDK found in $ZIP" >&2; exit 1; }
+
+PKG=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['data']['path'])" "$SRC/sdk-pkg.json")
+[[ -n "$PKG" ]] || { echo "Cannot read sdk-pkg.json" >&2; exit 1; }
+DST="/opt/devecostudio/sdk/$PKG"
+
+if [[ -e "$DST" ]]; then
+  echo "Already installed at $DST — remove it first to reinstall." >&2
+  exit 1
+fi
+echo "Installing to $DST (needs root) ..."
+sudo mkdir -p "$DST"
+sudo cp -a "$SRC/openharmony" "$SRC/hms" "$DST/"
+sudo cp "$SRC/sdk-pkg.json" "$DST/"
+_ver=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$DST/sdk-pkg.json" | tail -1)
+echo "OK: $PKG ($_ver)"
+echo "Use it: set compileSdkVersion (and targetSdkVersion) in build-profile.json5,"
+echo "e.g. '6.1.1(24)' for the 6.1.1 Release SDK."
+SDKEOF
+  chmod +x "$_pkg/bin/install-extra-sdk.sh"
 
   msg2 "Transforming vmoptions (macOS → Linux)..."
   sed \
@@ -415,6 +466,26 @@ for dirpath, dirnames, filenames in os.walk(root):
             pass
 PYEOF
 
+  msg2 "Patching hvigor to accept any compileSdkVersion..."
+  # DevEco 26.0.0's hvigor rejects compileSdkVersion values other than its
+  # own SUPPORT_COMPILE_VERSION ("26.0.0"), which makes it impossible to
+  # build against an additional SDK like 6.1.1 (installed via
+  # bin/install-extra-sdk.sh). Neutralize that single check; the SDK is then
+  # selected by compileSdkVersion and the artifact's releaseType follows the
+  # chosen SDK's metadata (6.1.1 → Release, 26.0.0 → Beta2).
+  python3 - "$_pkg/tools/hvigor/hvigor-ohos-plugin/src/utils/validate/validate-util.js" << 'PYEOF'
+import sys
+p = sys.argv[1]
+old = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||this._log.printErrorExit("UNSUPPORTED_COMPILESDKVERSION",[i.compileSdkVersion,o],[[version_const_js_1.VersionConst.SUPPORT_COMPILE_VERSION]])'
+new = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||void 0'
+s = open(p).read()
+if old in s:
+    open(p, 'w').write(s.replace(old, new))
+    print('  hvigor patch applied')
+else:
+    print('  hvigor patch: pattern not found (layout changed?)')
+PYEOF
+
   msg2 "Cleaning platform cruft..."
   find "$_pkg" -name '*.exe' -not -name 'Emulator.exe' -delete
   find "$_pkg" -name '*.dll' -delete
@@ -464,7 +535,9 @@ WRAPEOF
   find "$_pkg" -name '*:com.apple.cs.*' -delete 2>/dev/null || true
   # Remove Windows/macOS wrapper scripts, but keep real .sh files inside the
   # SDK (lldb launchers, cmake modules, build helpers)
-  find "$_pkg/bin" "$_pkg/tools/bin" -name '*.sh' -not -path '*/bin/devecostudio.sh' -delete 2>/dev/null || true
+  find "$_pkg/bin" "$_pkg/tools/bin" -name '*.sh' \
+    -not -path '*/bin/devecostudio.sh' \
+    -not -path '*/bin/install-extra-sdk.sh' -delete 2>/dev/null || true
   find "$_pkg/plugins" -name '*.sh' -delete 2>/dev/null || true
 
   # ── Desktop entry & symlink ──

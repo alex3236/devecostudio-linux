@@ -141,6 +141,43 @@ Both behaviors are controlled by variables at the top of the PKGBUILD:
 </td></tr></thead></table>
 </details>
 
+### Release SDK
+
+The bundled IDE ships HarmonyOS 26.0.0 (Beta2). Until it goes stable, app
+submission may require building against a release (Release) SDK.
+
+An additional Release SDK (6.1.1 or another version) can be installed and
+used per project.
+
+<details>
+<summary><b>How?</b></summary>
+<br><table><thead><tr><td>
+
+1. Download the corresponding CLI tools package;
+2. Install the SDK into the IDE directory with the following command:
+    ```shell
+    # Install SDK from a Huawei CLI zip (needs sudo)
+    sudo /opt/devecostudio/bin/install-extra-sdk.sh /commandline-tools-linux-x64-6.1.1.280.zip
+    ```
+
+3. Set the compile SDK in your project:
+    ```json5
+    "compileSdkVersion": "6.1.1(24)",
+    "targetSdkVersion": "6.1.1(24)"
+    ```
+
+</td></tr></thead></table>
+
+The package patches hvigor so any `compileSdkVersion` is accepted; the built
+artifact's `releaseType` follows the SDK it was compiled against (6.1.1 →
+`Release`, 26.0.0 → `Beta2`). After a package upgrade, restart any running
+hvigor daemon (`pkill -f daemon-process-boot-script`) so the patch takes
+effect.
+
+Note: source code using API 26-only interfaces (e.g. newer camera APIs)
+will not compile against 6.1.1 — adjust or guard the code accordingly.
+</details>
+
 ### Emulator
 
 The emulator works, but before first use you must accept the software
