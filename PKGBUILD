@@ -436,9 +436,11 @@ PYEOF
   # Wrap the bundled python3 (the venv symlinks inherit it): Huawei's pip
   # flow runs `pip wheel <lib> --no-deps` then `pip install <lib>
   # --no-index`, so torch's Linux-only nvidia deps are never fetched. Strip
-  # both flags so pip resolves deps from the network on demand. Absolute
-  # path to the real ELF avoids recursion via the venv's python3.12 →
-  # python3 symlink.
+  # both flags so pip resolves deps from the network on demand. python3 is a
+  # symlink to the real python3.12 ELF, so rm it first — `cat >` through
+  # the symlink would overwrite the ELF and create a wrapper→wrapper
+  # recursion loop.
+  rm -f "$_pybase/bin/python3"
   cat > "$_pybase/bin/python3" << 'WRAPEOF'
 #!/bin/bash
 # Huawei's pip flow drops deps (wheel --no-deps, install --no-index); strip.
@@ -457,6 +459,9 @@ WRAPEOF
   # under tools/codelinter/linter/result/ — make it world-writable so
   # running without sudo works.
   chmod 777 "$_pkg/tools/codelinter/linter/result"
+  # macOS code-signature xattr sidecar files ("<file>:com.apple.cs.*") ship
+  # in plugins' node_modules etc.; they are useless on Linux
+  find "$_pkg" -name '*:com.apple.cs.*' -delete 2>/dev/null || true
   # Remove Windows/macOS wrapper scripts, but keep real .sh files inside the
   # SDK (lldb launchers, cmake modules, build helpers)
   find "$_pkg/bin" "$_pkg/tools/bin" -name '*.sh' -not -path '*/bin/devecostudio.sh' -delete 2>/dev/null || true
