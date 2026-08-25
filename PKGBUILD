@@ -17,7 +17,7 @@ pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.621
 _ideaver=2026.1.3
-pkgrel=7
+pkgrel=8
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -41,19 +41,21 @@ depends=(
 optdepends=(
   'fcitx5: Chinese input method support for JBR JCEF'
 )
-makedepends=('jq' 'p7zip')
+makedepends=('jq' 'p7zip' 'python')
 options=('!strip')
 source=(
   "devecostudio-mac.zip"
   "commandline-tools-linux-x64.zip"
   "idea-${_ideaver}.tar.gz::https://download.jetbrains.com/idea/idea-${_ideaver}.tar.gz"
   "devecostudio.desktop"
+  "cpython-3.12.10+20250409-x86_64-unknown-linux-gnu-install_only.tar.gz::https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10+20250409-x86_64-unknown-linux-gnu-install_only.tar.gz"
 )
 sha256sums=(
   '5d67a2cfdd7b984a9c9f64e5abc6e082c5e3bc958833a92a55370cc623799ce1'
   '0cea7ad6cc1af98ac701b9c61b7c9aae2d0f2104749a80ae84c1f6ca0fc17555'
   'a6f049716da1d09d9e0ec1500c60bf01a5ff8a0fe2419178dd1ff2fdb2b77563'
   'b530705424c7fdd61c3eaa477d6c79643e5d9d0cf7ecadc8f6e96559b7c6dc2d'
+  'e9cf6f7da499a4400ba30ae1da8f7ef25ce97827bd8c1084717aa05438035186'
 )
 
 prepare() {
@@ -248,6 +250,10 @@ PATCHEOF
     fi
   fi
 
+  # hdc (device debug tool) lives in the SDK toolchains; expose it as-is
+  mkdir -p "$pkgdir/usr/bin"
+  ln -sf /opt/devecostudio/sdk/default/openharmony/toolchains/hdc "$pkgdir/usr/bin/hdc"
+
   # ── Sign path fix (some Huawei plugins expect macOS-style path) ──
   mkdir -p "$_pkg/jbr/Contents/Home"
   ln -sf ../../bin "$_pkg/jbr/Contents/Home/bin"
@@ -306,6 +312,41 @@ fi
 # Emulator hardcodes the macOS-style image path ~/Library/Huawei/Sdk
 mkdir -p "$HOME/Library/Huawei"
 ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
+# appanalyzer python workaround (Huawei Linux gap): initRequirements
+# writes requirements/python_X/, but getPipLibraryDownloaded reads
+# requirements/Python_X/ (from `python3 --version` output). Case-
+# insensitive filesystems hide this; Linux does not → NPE. Bridge the
+# two names and seed requirements.json from the jar when missing. Also
+# fix the torch scenario: the pinned torchvision 0.21.0 needs torch 2.6
+# while the pin is torch 2.2.2 (a conflict that only resolves on
+# non-Linux because the cuda deps are Linux-gated); downgrade to 0.17.2.
+_pybin="/opt/devecostudio/plugins/harmony/lib/python/bin"
+_pyver=$("$_pybin/python3" --version 2>/dev/null | awk '{print $2}')
+if [[ -n "$_pyver" ]]; then
+  _an="$HOME/.cache/Huawei/DevEcoStudio26.0/caches/appanalyzer"
+  _req_dir="$_an/pythonconfig/requirements"
+  _req_file="$_req_dir/python_$_pyver/requirements.json"
+  mkdir -p "$_req_dir"
+  ln -sfn "python_$_pyver" "$_req_dir/Python_$_pyver"
+  if [[ ! -s "$_req_file" ]]; then
+    unzip -p "/opt/devecostudio/plugins/harmony/lib/hos-app-analyzer-26.0.0.621.jar" \
+      "python/${_pyver%.*}/requirements_external.json" > "$_req_file" 2>/dev/null
+  fi
+  "$_pybin/python3" - "$_req_file" << 'PYEOF'
+import json, os, sys
+p = sys.argv[1]
+if os.path.exists(p) and os.path.getsize(p) > 0:
+    try:
+        d = json.load(open(p))
+        for dep in d.get("dependencies", []):
+            if dep.get("name") == "torchvision" and dep.get("version") == "0.21.0":
+                dep["version"] = "0.17.2"
+                json.dump(d, open(p, "w"), ensure_ascii=False, indent=2)
+                break
+    except Exception:
+        pass
+PYEOF
+fi
 exec "$(dirname "$(readlink -f "$0")")/devecostudio" "${_JCEF_ARGS[@]}" "$@"
 SHEOF
   chmod +x "$_pkg/bin/devecostudio.sh"
@@ -381,6 +422,41 @@ PYEOF
   find "$_pkg" -name '*.jnilib' -delete
   find "$_pkg" -name '*.bat' -delete
   find "$_pkg" -name '*.ps1' -delete
+  # The Mac DMG ships a Mach-O python under plugins/harmony/lib/python
+  # (appanalyzer uses it for venv/pip). It cannot run on Linux. Replace it
+  # with a real Linux Python 3.12.10 (python-build-standalone): Huawei's
+  # appanalyzer only ships requirements resources for 3.11/3.12, and its
+  # venv dir name falls back to a hardcoded 3.12.10, so the version must
+  # match exactly or the requirements path lookup misses.
+  _pybase="$_pkg/plugins/harmony/lib/python"
+  rm -rf "$_pybase/bin" "$_pybase/include" "$_pybase/lib" "$_pybase/share"
+  cp -a "$srcdir/python/bin" "$_pybase/bin"
+  cp -a "$srcdir/python/lib" "$_pybase/lib"
+  cp -a "$srcdir/python/include" "$_pybase/include"
+  # Wrap the bundled python3 (the venv symlinks inherit it): Huawei's pip
+  # flow runs `pip wheel <lib> --no-deps` then `pip install <lib>
+  # --no-index`, so torch's Linux-only nvidia deps are never fetched. Strip
+  # both flags so pip resolves deps from the network on demand. Absolute
+  # path to the real ELF avoids recursion via the venv's python3.12 →
+  # python3 symlink.
+  cat > "$_pybase/bin/python3" << 'WRAPEOF'
+#!/bin/bash
+# Huawei's pip flow drops deps (wheel --no-deps, install --no-index); strip.
+# exec -a preserves argv[0] so Python keeps its venv/base identity.
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --no-deps|--no-index) ;;
+    *) args+=("$arg") ;;
+  esac
+done
+exec -a "$0" /opt/devecostudio/plugins/harmony/lib/python/bin/python3.12 "${args[@]}"
+WRAPEOF
+  chmod +x "$_pybase/bin/python3"
+  # codelinter (and the IDE's appanalyzer) writes logs and temp files
+  # under tools/codelinter/linter/result/ — make it world-writable so
+  # running without sudo works.
+  chmod 777 "$_pkg/tools/codelinter/linter/result"
   # Remove Windows/macOS wrapper scripts, but keep real .sh files inside the
   # SDK (lldb launchers, cmake modules, build helpers)
   find "$_pkg/bin" "$_pkg/tools/bin" -name '*.sh' -not -path '*/bin/devecostudio.sh' -delete 2>/dev/null || true

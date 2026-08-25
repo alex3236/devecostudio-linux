@@ -167,9 +167,10 @@ The CLI zip's `bin/` wrappers (`hvigorw`, `ohpm`, `hstack`, `codelinter`,
 
 ### /usr/bin exposure
 
-`devecostudio` always links to the wrapper. The five CLI tools are exposed
-only if `_expose_cli_tools=true`; `hvigorw`/`ohpm`/`hstack` use their
-original names (Huawei-specific, unlikely to collide), while
+`devecostudio` always links to the wrapper. `hdc` is also always linked
+(from the SDK toolchains; it is a plain ELF, not a wrapper). The five CLI
+tools are exposed only if `_expose_cli_tools=true`; `hvigorw`/`ohpm`/`hstack`
+use their original names (Huawei-specific, unlikely to collide), while
 `codelinter`/`Emulator` get an `h` prefix (`hcodelinter`, `hemulator`)
 unless `_hprefix_generic_tools=false`. Toggle both at the top of the
 PKGBUILD.
@@ -265,6 +266,89 @@ is deliberately **not** stripped (contains cross-compiled ARM binaries).
 `plugins/` — a blanket delete previously removed real SDK content
 (`llvm/bin/lldb.sh`, cmake `Squish*.sh`).
 
+### Bundled python is macOS-only (appanalyzer)
+
+The Mac DMG ships a full python under `plugins/harmony/lib/python/` (Mach-O
+binaries plus `com.apple.cs.CodeSignature` xattr sidecar files — proof it
+was never meant for Linux). The IDE's appanalyzer (`hos-app-analyzer` jar)
+uses it for venv/pip:
+
+- `PathUtil.getInnerPythonHome()` → `<IDE>/plugins/harmony/lib/python/bin`
+- `PythonConfigUtil.PYTHON_COMMAND` → `python3`
+- `createVenv` runs `<bin>/python3 -m venv --clear <venv>` — execve
+  refuses Mach-O, so venv creation always failed with Huawei's misleading
+  "check the venv directory permissions / is it locked" message. The venv
+  parent dir is actually user-writable
+  (`PathManager.getSystemPath()/caches/appanalyzer/pythonconfig`).
+- `AllowedPython.VERSION_NUMBER` is parsed dynamically from
+  `python3 --version`, but falls back to a hardcoded `3.12.10` when the
+  probe fails — which it always does, because `getRealPythonPath()` returns
+  a **file** path while `findRealPythonDir()` expects a directory. So the
+  venv dir name is effectively pinned to `python_3.12.10`.
+
+The fix replaces the whole `bin/ lib/ include/ share/` tree with a real
+Linux CPython **3.12.10** from python-build-standalone
+(astral-sh, MIT; `cpython-3.12.10+20250409-...-install_only.tar.gz` is a
+automatic source with a pinned checksum). The version must stay exactly
+3.12.10: the appanalyzer jar only ships requirements resources for
+`python/3.11/` and `python/3.12/`, and `getLocalRequirements` reads
+`/python/<minor>/requirements_internal.json` — a 3.14 interpreter produced
+`/python/3.14/...` → resource missing → `localRequirements == null` → NPE
+in `PipLibraryDownloadUtil.getPipLibraryDownloaded`. `python` sits in
+`makedepends` (the exec-bit restore script needs a system interpreter), not
+`depends` (the IDE never runs the system python).
+
+### appanalyzer requirements path case mismatch
+
+`initRequirements()` writes `requirements/python_3.12.10/requirements.json`
+(`AllowedPython.getFileName()` = `python_%s`), but `getPipLibraryDownloaded`
+reads `requirements/Python_3.12.10/requirements.json` — the version string
+comes from `python3 --version` output (`"Python 3.12.10"`) with spaces
+replaced by `_`. Case-insensitive filesystems (macOS/Windows, where Huawei
+tests) treat these as the same file; Linux does not, so the read fails,
+`parseProcess(null)` returns null, and every appanalyzer run dies with the
+`localRequirements is null` NPE. The launcher bridges the two names with a
+symlink (`Python_<ver> → python_<ver>`) and seeds `requirements.json` from
+the jar's `python/3.12/requirements_external.json` when missing.
+
+### appanalyzer torch scenario
+
+Torch-related analysis works, with two upstream bugs worked around: (1) the
+requirements pin `torchvision==0.21.0` which requires torch 2.6 (the pin is
+torch 2.2.2) — a conflict that only resolves on non-Linux because the cuda
+deps are `platform_system == "Linux"`-gated; (2) the pip flow runs
+`pip wheel <lib> --no-deps` then `pip install <lib> --no-index
+--find-links <cache>`, so torch's 11 Linux-only nvidia wheels
+(nvrtc/cudnn/cublas/…) are never downloaded.
+
+Fix, both in the package:
+
+- **torchvision 0.21.0 → 0.17.2** in `requirements.json` (runtime, in the
+  launcher, when the seed file still has the upstream version).
+- **wrap the bundled `bin/python3`** at build time: a bash shim that strips
+  `--no-deps`/`--no-index` from argv and `exec -a "$0"` the real ELF. The
+  appanalyzer venv's `bin/python3` is a symlink to the bundled one, so the
+  venv inherits the wrapper on creation — no timing gap on first use. Only
+  Huawei's two pip invocations carry those flags, so every other call
+  (version probes, `-m venv`, user pip) passes through untouched.
+
+  Two traps: the shim must exec the **absolute** path to the real
+  `python3.12` — `dirname $0` resolves to the venv's `bin/` where
+  `python3.12 → python3` is a symlink loop (venv creation hangs); and it
+  must keep `exec -a "$0"` so Python still finds the venv's `pyvenv.cfg`
+  (otherwise pip installs into the bundled interpreter, which is
+  root-owned and unwritable).
+
+### codelinter needs a writable result dir
+
+`tools/codelinter/linter/result/` holds `codelinter.log`, `arkPerfCheck.log`,
+`hpauditTmp/`. The wrapper creates it and the linter writes into it on every
+run; with the dir at root:755 and stale root-owned 600 logs from a previous
+`sudo` run, a non-root user gets "failed to execute" with no log written.
+The package chmods the dir to 777; a fresh install starts empty so no stale
+files remain. (Root-owned 600 leftovers from manual sudo runs must be
+deleted locally.)
+
 ### `ohos-trace` plugin removal
 
 `plugins/ohos-trace` is deleted; it carries the "lemon" plugin bug (exit hang).
@@ -298,6 +382,7 @@ the CLI.
     ├── node/ + lib/node_modules (2 symlinks above)
     ├── hvigor/ ohpm/ hstack/ codelinter/ emulator/ UxTestService/
 /usr/bin/devecostudio → /opt/devecostudio/bin/devecostudio.sh
+/usr/bin/hdc → /opt/devecostudio/sdk/default/openharmony/toolchains/hdc (always)
 /usr/bin/{hvigorw,ohpm,hstack,hcodelinter,hemulator} (configurable)
 ```
 

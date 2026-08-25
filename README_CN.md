@@ -12,47 +12,64 @@
 
 这不是官方包，也未获得华为或 JetBrains 的认可。
 
+## 状态
+
+除预览器外，功能基本可用。若发现任何问题，请提交一个 Issue。
+
+若原生 Linux 版发行，此项目将归档。
+
+> [!NOTE]  
+> 如果你计划使用此项目，强烈建议完整阅读 README，其中折叠部分根据需要选择性阅读。
+
 ## 构建
 
-请务必自行检查 `PKGBUILD`。
+使用前请务必自行检查 `PKGBUILD`。
 
-要使用经过测试的 PKGBUILD，请使用已打 tag 的版本——默认分支可能包含未测试的改动：
+<details>
+<summary><b>我想在本地构建</b></summary>
+<br><table><thead><tr><td>
 
-    git checkout <latest-tag>
-
-（将 `<latest-tag>` 替换为最新 tag，例如 `26.0.0.621-7`——可用 `git tag` 查看）。
-
-Tag 名中的版本号也是该 PKGBUILD 的 `pkgver`，即下方需要下载的 DevEco Studio 版本（例如 `26.0.0.621`）。
-
-### 本地构建（makepkg）
-
-你需要从华为官网手动下载两个文件：
+从华为官网下载两个文件：
 
 1. **DevEco Studio ${pkgver} for Mac**
 2. **Command Line Tools for Linux (x86_64) ${pkgver}**
 
-将两个 `.zip` 文件放到 PKGBUILD 所在目录，并**重命名**为 PKGBUILD 期望的固定文件名——`devecostudio-mac.zip` 和 `commandline-tools-linux-x64.zip`（文件名与版本无关）。然后执行：
+将两个 `.zip` 文件放到 PKGBUILD 所在目录，并**重命名**为 `devecostudio-mac.zip` 和
+`commandline-tools-linux-x64.zip`。
 
+然后执行：
+
+    # 克隆仓库
+    git clone https://github.com/alex3236/devecostudio-linux.git
+    cd devecostudio-linux
+
+    # 检出最新 tag（能接受未测试的改动可跳过）
+    git fetch --tags
+    git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
+    
+    # 构建
     makepkg -si
 
-IntelliJ IDEA 的 tarball 会自动从 JetBrains CDN 下载。
+如果遇到 checksum 错误，说明华为更新了 IDE，你需要自行测试此项目是否仍然可用。
 
-`pkgver` 中的版本及其 SHA256 校验值是作者测试过的。要使用其他版本：
+要更新 checksum 以匹配你的本地文件：
 
-1. 查看 PKGBUILD 中期望的文件名（文件名不含版本号，只需重命名一次下载文件），
-2. 下载所需版本，重命名为固定文件名，然后更新 `pkgver` 和两个 SHA256 校验值（如果不想校验，可设为 `"SKIP"`），
-3. 也可以修改 `_ideaver` 换用不同的 IDEA 基础版本。
+    updpkgsums
 
-只有 `pkgver` 中的版本经过测试——如果你做了修改，请自行测试结果。
 
-### 用 GitHub Actions 构建
+</td></tr></thead></table>
+</details>
+
+<details>
+<summary><b>我没有 Arch 机器，或我想在线构建</b></summary>
+<br><table><thead><tr><td>
 
 如果你手边没有 Arch 机器，也可以用 GitHub Actions 跑同样的构建：
 
-1. **Fork** 本仓库（该工作流需要手动触发），或使用你自己的 fork。
+1. **Fork** 本仓库。
 2. 打开 **Actions** 标签页，选择 **Build DevEco Studio PKGBUILD** 工作流，点击 **Run workflow**。
 3. 可选：在 **Use workflow from** 中选择已打 tag 的发布版本。
-4. 填写两个下载 URL（华为的链接会过期，每次构建都需要从[下载页](https://developer.huawei.com/consumer/cn/deveco-studio/)获取新链接）：
+4. 填写两个下载 URL：
    - `mac_zip_url` — Mac zip 的 URL
    - `cli_zip_url` — Linux Command Line Tools zip 的 URL
 5. 可选地覆盖版本号和校验值（留空则使用 `PKGBUILD` 中的值）：
@@ -64,9 +81,16 @@ IntelliJ IDEA 的 tarball 会自动从 JetBrains CDN 下载。
 
 GitHub 账户在公共仓库上可以免费使用 Actions。
 
-### 在其他发行版上使用
+</td></tr></thead></table>
+</details>
 
-工作流还会生成一个与发行版无关的 tarball（`devecostudio-<版本>-linux-x86_64.tar.gz`），包含完整的 `/opt/devecostudio` 目录和根目录下的 `devecostudio.desktop`。在 Debian/Ubuntu/Fedora 或任何其他 Linux 上，解压并手动设置启动器：
+<details>
+<summary><b>我需要在其他发行版上使用此项目</b></summary>
+<br><table><thead><tr><td>
+
+使用在线构建。它会生成一个与发行版无关的 tarball（`devecostudio-<版本>-linux-x86_64.tar.gz`）。
+
+在 Debian/Ubuntu/Fedora 或任何其他 Linux 上，解压并手动设置启动器：
 
     sudo tar -xzf devecostudio-<版本>-linux-x86_64.tar.gz -C /opt
     sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
@@ -74,61 +98,79 @@ GitHub 账户在公共仓库上可以免费使用 Actions。
 
 还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`。中文输入支持需要 `fcitx5`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
 
-## PATH 上的 CLI 工具
+当然，你也可以用你喜欢的其他方式，比如用容器运行 Arch 用以构建。
+
+</td></tr></thead></table>
+</details>
+
+## 使用
+
+使用任意你熟悉的方式（开始菜单/程序坞/命令行）启动 DevEco Studio。
+
+### PATH 上的 CLI 工具
 
 IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端使用。默认情况下，包会把它们软链到 `/usr/bin`：
 
-| `/usr/bin` 入口 | 工具 | 说明 |
-|---|---|---|
-| `devecostudio` | IDE 启动器 | 始终安装 |
-| `hvigorw` | 构建工具 | 华为特有名称，原名暴露 |
-| `ohpm` | 包管理器 | 华为特有名称，原名暴露 |
-| `hstack` | 工具链辅助 | 华为特有名称，原名暴露 |
-| `hcodelinter` | 代码检查 | 加 `h` 前缀避免冲突 |
-| `hemulator` | 模拟器 CLI | 加 `h` 前缀避免冲突 |
+- 始终暴露的命令：`devecostudio`, `hdc`
+- 默认暴露的命令：`hvigorw`, `ohpm`, `hstack`, `hcodelinter`, `hemulator`；
+
+其中 `Emulator` 和 `codelinter` 添加了前缀以避免可能的冲突。
+
+<details>
+<summary><b>调整这些软链行为</b></summary>
+<br><table><thead><tr><td>
 
 两种行为都由 PKGBUILD 顶部的变量控制：
 
-- `_expose_cli_tools=true` — 设为 `false` 则完全不暴露到 `/usr/bin`（工具仍留在 `/opt/devecostudio/tools/bin/`，可用完整路径调用）。
-- `_hprefix_generic_tools=true` — 设为 `false` 则去掉 `h` 前缀，以原名暴露 `codelinter` / `Emulator`（可能与其他包冲突）。
+- `_expose_cli_tools=true`
+    - 若设为 `false`，默认暴露的指令不再暴露到 `/usr/bin`
+    - 仍可通过 `/opt/devecostudio/tools/bin/`完整路径调用
+- `_hprefix_generic_tools=true`
+    - 若设为 `false`，则不添加 `h` 前缀，以原名暴露 `codelinter` 和 `Emulator`
 
-## 模拟器
+</td></tr></thead></table>
+</details>
 
-模拟器可用，但首次使用前需要同意软件协议并下载系统镜像，例如：
+### 模拟器
 
-	# 查看可用镜像
-	hemulator -imageList
+模拟器可用，但首次使用前需要通过命令行同意软件协议并下载系统镜像。
+
+<details>
+<summary><b>怎么做？</b></summary>
+<br><table><thead><tr><td>
+
+    # 查看可用镜像
+    hemulator -imageList
     
     # 只查看手机镜像
     hemulator -imageList -deviceType phone
     
     # 使用 jq 以获得简洁输出
     hemulator -imageList -deviceType phone | jq '.[].osVersion'
-	
+    
     # 安装镜像
-	hemulator -install -deviceType phone -osVersion "HarmonyOS 6.1.1(24)"
+    hemulator -install -deviceType phone -osVersion "HarmonyOS 6.1.1(24)"
 
 安装完成后，即可在 IDE 的设备管理器中创建、管理和启动模拟器。
 
-## 预览器
+</td></tr></thead></table>
+</details>
+
+### 预览器
 
 预览器不可用。华为尚未将 Rosen 渲染引擎移植到 Linux。
 
-## 背后做了什么
+## 这是如何实现的？
 
-PKGBUILD 解压 Mac DMG，取出平台无关的部分——JAR、插件、modules。SDK 和 CLI 工具（hvigor、ohpm、node、emulator 等）则取自华为的 Linux Command Line Tools。然后用 IntelliJ IDEA 的 Linux 对应组件替换 macOS 专属部分（启动器、JBR、原生库）。vmoptions 和 product-info.json 会在构建时动态转换，让 IDE 知道自己运行在 Linux 上。
+PKGBUILD 解压 Mac DMG，取出平台无关的部分，然后用 IntelliJ IDEA 的 Linux 对应组件替换 macOS 专属部分（启动器、JBR、原生库）。vmoptions 和 product-info.json 会在构建时动态转换，让 IDE 知道自己运行在 Linux 上。
 
 最终得到一个无需 Wine 或容器即可运行的原生体验 DevEco Studio。
 
 为什么从 Mac 版重新打包？华为为 Windows、macOS 和 Linux 分发 DevEco Studio。Linux 发行版有两个问题：安装器是难以解包的 `.exe`，且打包版本更新滞后。Mac DMG 可以轻松解包，且包含我们需要的全部跨平台文件。
 
-真正平台相关的、需要替换的部分只有：
-- Java 运行时（JBR）— macOS → Linux
-- 原生启动器二进制（以及 `fsnotifier`）
-- 共享库（.so 文件）
-- SDK 和 CLI 工具——取自 Linux Command Line Tools
-
-其他一切——Java 代码、插件、模板——都是平台无关的。
+<details>
+<summary><b>查看各组件的细节</b></summary>
+<table><thead><tr><td>
 
 ### 模拟器
 
@@ -159,13 +201,18 @@ XWayland 不会向 JVM 报告 per-monitor 缩放（它报告 1.0），因此在 
 
 你也可以通过 IDE 的 *Help → Edit Custom VM Options* 手动设置缩放。更多信息请参考 [IDEA HiDPI 文档](https://intellij-support.jetbrains.com/hc/en-us/articles/360007994999-HiDPI-configuration)。
 
-### 一些魔法
+</td></tr></thead></table>
+</details>
 
 限于篇幅，你可以查看 [DETAILS.md](DETAILS.md) 了解本项目使用的其他魔法。
 
 ## 许可情况
 
 本项目与华为无关联，也未获华为认可。
+
+<details>
+<summary><b>条款、分发与内置组件许可</b></summary>
+<br><table><thead><tr><td>
 
 DevEco Studio 是华为的商业产品。使用前即表示你同意《华为 DevEco Studio 用户协议》（见 LICENSE.huawei）。几个值得注意的条款：
 
@@ -193,3 +240,6 @@ DevEco Studio 是华为的商业产品。使用前即表示你同意《华为 De
 - JetBrains Runtime (JBR) 基于 OpenJDK，采用带 classpath exception 的 GPLv2。
 - IntelliJ IDEA Community 组件以 Apache 2.0 提供。
 - DevEco Studio 捆绑的各种第三方库各自带有其许可。
+
+</td></tr></thead></table>
+</details>
