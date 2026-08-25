@@ -160,6 +160,12 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 预览器不可用。华为尚未将 Rosen 渲染引擎移植到 Linux。
 
+### DevEco CLI
+
+华为的 `DevEco CLI` 可以帮助你和你的 AI Agent 轻松初始化、构建、签名、调试项目，以及查找官方文档。
+
+本项目可以为 DevEco CLI 提供环境支持。设置 `DEVECO_CLI_STUDIO_PATH=/opt/devecostudio` 即可。
+
 ## 这是如何实现的？
 
 PKGBUILD 解压 Mac DMG，取出平台无关的部分，然后用 IntelliJ IDEA 的 Linux 对应组件替换 macOS 专属部分（启动器、JBR、原生库）。vmoptions 和 product-info.json 会在构建时动态转换，让 IDE 知道自己运行在 Linux 上。

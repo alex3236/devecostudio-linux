@@ -168,6 +168,12 @@ IDE's Device Manager.
 </td></tr></thead></table>
 </details>
 
+### DevEco CLI
+
+With Huawei's DevEco CLI, you and your AI Agent can effortlessly handle project initialization, building, signing, and debugging, alongside documentation lookup.
+
+This project provide environment support for DevEco CLI. Simply set `DEVECO_CLI_STUDIO_PATH=/opt/devecostudio`.
+
 ### Previewer
 
 The previewer is unavailable. Huawei has not yet ported the Rosen
