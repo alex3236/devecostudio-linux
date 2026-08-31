@@ -26,7 +26,7 @@ jobs:
           echo "=== free -h after swapon ==="
           free -h
 
-      - name: Stress-test inside an arch container (no container: block)
+      - name: "Stress-test inside an arch container (no container block)"
         run: |
           # docker is available on the ubuntu host runner; the container
           # inherits the host's memory + swap
