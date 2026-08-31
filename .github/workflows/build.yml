@@ -85,7 +85,9 @@ jobs:
         run: |
           runuser -u builder -- bash -c '
             cd devecostudio
-            makepkg -sfc --noconfirm
+            # no -c: makepkg --clean removes pkg/, which the packaging step
+            # below needs (build.sh --stage reads the staging tree)
+            makepkg -sf --noconfirm
           '
 
       - name: Build .deb, .rpm and tarball with build.sh
