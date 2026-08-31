@@ -1,0 +1,52 @@
+name: Swap environment check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Inspect memory and disk
+        run: |
+          echo "=== free -h ==="
+          free -h
+          echo "=== df / ==="
+          df -h /
+          echo "=== /swapfile /ci.swap existence ==="
+          ls -la /swapfile /ci.swap 2>&1 || true
+
+      - name: Try creating swap (current candidate logic)
+        run: |
+          set -x
+          avail=$(df -B1G / | awk 'NR==2{print $4}')
+          echo "avail: ${avail}G"
+          size=$(( avail - 6 ))
+          [[ $size -gt 14 ]] && size=14
+          echo "size: ${size}G"
+          rm -f /ci.swap
+          truncate -s "${size}G" /ci.swap
+          chmod 600 /ci.swap
+          mkswap /ci.swap >/dev/null
+          swapon /ci.swap
+          free -h
+
+      - name: Stress-test memory (simulate rpm peak)
+        run: |
+          # consume ~11 GB in one process (rpm peaks ~16G; runner RAM+3G swap
+          # should cover ~10G, the rest comes from /ci.swap)
+          python3 - <<'EOF'
+          import os, time
+          chunk = 256 * 1024 * 1024
+          bufs = []
+          try:
+              while True:
+                  bufs.append(bytearray(chunk))
+                  print(f"allocated {len(bufs)*256} MB", flush=True)
+          except MemoryError:
+              print("MemoryError at", len(bufs)*256, "MB")
+              time.sleep(3)
+          EOF
+          echo "peak alloc ok"
