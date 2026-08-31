@@ -26,79 +26,124 @@
 使用前请务必自行检查 `PKGBUILD`。
 
 <details>
-<summary><b>我想在本地构建</b></summary>
+<summary><b>我想在本地构建（任意发行版）</b></summary>
 <br><table><thead><tr><td>
 
-从华为官网下载两个文件：
+首先，从华为官网下载两个文件：
 
 1. **DevEco Studio ${pkgver} for Mac**
 2. **Command Line Tools for Linux (x86_64) ${pkgver}**
 
-将两个 `.zip` 文件放到 PKGBUILD 所在目录，并**重命名**为 `devecostudio-mac.zip` 和
+将两个 `.zip` 放在 PKGBUILD 旁边，并**重命名**为 `devecostudio-mac.zip` 和
 `commandline-tools-linux-x64.zip`。
-
-然后执行：
 
     # 克隆仓库
     git clone https://github.com/alex3236/devecostudio-linux.git
     cd devecostudio-linux
 
-    # 检出最新 tag（能接受未测试的改动可跳过）
+    # 检出最新 tag（如可接受未经测试的更改可跳过）
     git fetch --tags
     git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
-    
-    # 构建
+
+接下来的步骤视你所处的发行版而定：
+
+<details>
+<summary><b>我在用 Arch Linux</b></summary>
+<br><ul>
+
     makepkg -si
 
-如果遇到 checksum 错误，说明华为更新了 IDE，你需要自行测试此项目是否仍然可用。
+如果出现校验和不符，说明华为更新了 IDE，你需要自行测试此项目是否仍然可用。
 
-要更新 checksum 以匹配你的本地文件：
+要更新校验和以匹配你的本地文件：
 
     updpkgsums
 
+</ul>
+</details>
+
+<details>
+<summary><b>我在用其他发行版</b></summary>
+<br><ul>
+
+你将需要以下依赖：
+
+    bsdtar 或 unzip, jq, python3, curl, binutils
+
+如你需要构建 .deb/.rpm，则额外需要：
+
+    nfpm, gettext
+
+准备好后：
+
+    # 查看构建脚本帮助
+    ./build.sh -h
+
+    # 例：构建 tarball
+    ./build.sh
+    
+    # 例：构建 tarball 和 rpm 包
+    ./build.sh --rpm
+
+</ul>
+</details>
 
 </td></tr></thead></table>
 </details>
 
+
 <details>
-<summary><b>我没有 Arch 机器，或我想在线构建</b></summary>
+<summary><b>我想用在线构建（GitHub Actions）</b></summary>
 <br><table><thead><tr><td>
 
-如果你手边没有 Arch 机器，也可以用 GitHub Actions 跑同样的构建：
+同样的构建可以在 GitHub Actions 中运行：
 
-1. **Fork** 本仓库。
-2. 打开 **Actions** 标签页，选择 **Build DevEco Studio PKGBUILD** 工作流，点击 **Run workflow**。
-3. 可选：在 **Use workflow from** 中选择已打 tag 的发布版本。
+1. **Fork** 此仓库。
+2. 打开 **Actions** 标签页，选择 **Build DevEco Studio PKGBUILD** 并点击 **Run workflow**。
+3. 可选："Use workflow from" 选择某个已发布的 tag。
 4. 填写两个下载 URL：
    - `mac_zip_url` — Mac zip 的 URL
    - `cli_zip_url` — Linux Command Line Tools zip 的 URL
 5. 可选地覆盖版本号和校验值（留空则使用 `PKGBUILD` 中的值）：
    - `pkgver` — 例如 `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — 两个 zip 的 SHA256；未测试过的版本可用 `SKIP` 跳过校验
-6. 运行结束后，从运行页面下载 `devecostudio-pkg` artifact，并在本地安装：
-
-       sudo pacman -U devecostudio-*.pkg.tar.zst
+6. 运行结束后，从运行页面下载对应平台的 artifact：
+   - `devecostudio-arch` — Arch 包
+   - `devecostudio-deb` — Debian/Ubuntu 包
+   - `devecostudio-rpm` — Fedora/RHEL 包
+   - `devecostudio-tarball` — 任何其他发行版
 
 GitHub 账户在公共仓库上可以免费使用 Actions。
 
 </td></tr></thead></table>
 </details>
 
+## 安装
+
+此包的目标平台是 Arch Linux（makepkg）；
+`.deb`/`.rpm` 构建覆盖 Debian 12+ / Ubuntu 22.04+ 与 Fedora / RHEL；
+tarball 适用于任何 Linux。
+
+    # Arch
+    sudo pacman -U devecostudio-*.pkg.tar.zst
+
+    # Debian / Ubuntu
+    sudo apt install ./devecostudio_*.deb
+
+    # Fedora / RHEL
+    sudo dnf install ./devecostudio-*.rpm
+
 <details>
-<summary><b>我需要在其他发行版上使用此项目</b></summary>
+<summary><b>其他发行版（通过 tarball）</b></summary>
 <br><table><thead><tr><td>
 
-使用在线构建。它会生成一个与发行版无关的 tarball（`devecostudio-<版本>-linux-x86_64.tar.gz`）。
-
-在 Debian/Ubuntu/Fedora 或任何其他 Linux 上，解压并手动设置启动器：
+解压 tarball 并手动设置启动器：
 
     sudo tar -xzf devecostudio-<版本>-linux-x86_64.tar.gz -C /opt
     sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
     sudo desktop-file-install /opt/devecostudio.desktop
 
 还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`。中文输入支持需要 `fcitx5`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
-
-当然，你也可以用你喜欢的其他方式，比如用容器运行 Arch 用以构建。
 
 </td></tr></thead></table>
 </details>
@@ -109,7 +154,8 @@ GitHub 账户在公共仓库上可以免费使用 Actions。
 
 ### PATH 上的 CLI 工具
 
-IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端使用。默认情况下，包会把它们软链到 `/usr/bin`：
+IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端使用。
+默认情况下，包会把它们软链到 `/usr/bin`：
 
 - 始终暴露的命令：`devecostudio`, `hdc`
 - 默认暴露的命令：`hvigorw`, `ohpm`, `hstack`, `hcodelinter`, `hemulator`, `harktsdoc`；
@@ -133,7 +179,8 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 ### 额外 SDK（旧版本）
 
-内置 SDK 为 HarmonyOS 26.0.0（Release）。可以额外安装旧版 SDK（如 6.1.1 Release），按项目切换使用——便于复现问题或针对旧 API 版本构建。
+内置 SDK 为 HarmonyOS 26.0.0（Release）。
+可以额外安装旧版 SDK（如 6.1.1 Release），按项目切换使用——便于复现问题或针对旧 API 版本构建。
 
 <details>
 <summary><b>怎么做？</b></summary>
@@ -154,7 +201,7 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 </td></tr></thead></table>
 
-安装旧版 SDK 时，脚本会一并修补两处限制使其可用：hvigor 的 `compileSdkVersion` 校验和 IDE 同步检查（两者都硬编码为内置 SDK 版本）。补丁只在执行 `install-extra-sdk.sh` 时应用——默认安装保持原样。
+安装旧版 SDK 时，脚本会应用补丁使其可用。补丁只在执行 `install-extra-sdk.sh` 时应用。
 
 注意：使用了 API 26 独有接口的源码（如新版相机 API）无法用 6.1.1 编译，需要相应调整或防护。
 </details>

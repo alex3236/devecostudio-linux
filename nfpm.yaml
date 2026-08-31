@@ -1,0 +1,75 @@
+name: devecostudio
+arch: amd64
+platform: linux
+version: "${PKGVER}"
+release: "${PKGREL}"
+section: devel
+priority: optional
+maintainer: devecostudio-linux <https://github.com/alex3236/devecostudio-linux>
+description: |
+  Huawei DevEco Studio repackaged for Linux
+  Repackages DevEco Studio (Huawei's HarmonyOS IDE) from its Mac DMG, using
+  Linux-native components (launcher, JBR, native libraries) from JetBrains
+  IntelliJ IDEA.
+homepage: https://github.com/alex3236/devecostudio-linux
+license: "custom:Commercial"
+
+overrides:
+  deb:
+    depends:
+      - libxss1
+      - libxtst6
+      - libnss3
+      - libasound2
+      - libcrypt1
+      - libfreetype6
+      - libpulse0
+    recommends:
+      - fcitx5
+  rpm:
+    depends:
+      - libXScrnSaver
+      - libXtst
+      - nss
+      - alsa-lib
+      - libxcrypt-compat
+      - freetype
+      - pulseaudio-libs
+    recommends:
+      - fcitx5
+
+contents:
+  - src: pkg/devecostudio/opt/devecostudio
+    dst: /opt/devecostudio
+    type: tree
+  - src: pkg/devecostudio/usr/share/applications/devecostudio.desktop
+    dst: /usr/share/applications/devecostudio.desktop
+  # /usr/bin -> /opt/devecostudio symlinks (as installed by the Arch package)
+  - dst: /usr/bin/devecostudio
+    src: /opt/devecostudio/bin/devecostudio.sh
+    type: symlink
+  - dst: /usr/bin/hdc
+    src: /opt/devecostudio/sdk/default/openharmony/toolchains/hdc
+    type: symlink
+  - dst: /usr/bin/hvigorw
+    src: /opt/devecostudio/tools/bin/hvigorw
+    type: symlink
+  - dst: /usr/bin/ohpm
+    src: /opt/devecostudio/tools/bin/ohpm
+    type: symlink
+  - dst: /usr/bin/hstack
+    src: /opt/devecostudio/tools/bin/hstack
+    type: symlink
+  - dst: /usr/bin/hcodelinter
+    src: /opt/devecostudio/tools/bin/codelinter
+    type: symlink
+  - dst: /usr/bin/hemulator
+    src: /opt/devecostudio/tools/bin/Emulator
+    type: symlink
+  - dst: /usr/bin/harktsdoc
+    src: /opt/devecostudio/tools/bin/arktsdoc
+    type: symlink
+
+scripts:
+  postinstall: scripts/postinstall.sh
+  postremove: scripts/postinstall.sh

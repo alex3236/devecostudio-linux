@@ -26,18 +26,16 @@ If Huawei ships a native Linux build, this project will be archived.
 Always check `PKGBUILD` yourself before using.
 
 <details>
-<summary><b>I want to build locally</b></summary>
+<summary><b>Build locally (any distro)</b></summary>
 <br><table><thead><tr><td>
 
-Download two files from Huawei's website:
+First, download two files from Huawei's website:
 
 1. **DevEco Studio ${pkgver} for Mac**
 2. **Command Line Tools for Linux (x86_64) ${pkgver}**
 
 Place both `.zip` files next to the PKGBUILD, **renamed** to `devecostudio-mac.zip` and
 `commandline-tools-linux-x64.zip`.
-
-Then:
 
     # Clone the repo
     git clone https://github.com/alex3236/devecostudio-linux.git
@@ -46,8 +44,13 @@ Then:
     # Checkout latest tag (skip if you accept untested changes)
     git fetch --tags
     git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
-    
-    # Building
+
+What to do next depends on your distro:
+
+<details>
+<summary><b>I'm on Arch Linux</b></summary>
+<br><ul>
+
     makepkg -si
 
 If you find checksum errors, it means Huawei has updated the IDE, and you will need to test for yourself whether this project still works.
@@ -56,16 +59,44 @@ To update checksums to match your local files:
 
     updpkgsums
 
+</ul>
+</details>
+
+<details>
+<summary><b>I'm on another distro</b></summary>
+<br><ul>
+
+You will need these dependencies:
+
+    bsdtar or unzip, jq, python3, curl, binutils
+
+To also build .deb/.rpm packages:
+
+    nfpm, gettext
+
+Then:
+
+    # Show the build script's help
+    ./build.sh -h
+
+    # Example: build the tarball
+    ./build.sh
+
+    # Example: build the tarball and an rpm package
+    ./build.sh --rpm
+
+</ul>
+</details>
 
 </td></tr></thead></table>
 </details>
 
+
 <details>
-<summary><b>I don't have an Arch machine, or I want to build online</b></summary>
+<summary><b>Build online (GitHub Actions)</b></summary>
 <br><table><thead><tr><td>
 
-If you don't have an Arch machine at hand, the same build can be run in
-GitHub Actions:
+The same build can be run in GitHub Actions:
 
 1. **Fork** this repository.
 2. Open the **Actions** tab, select **Build DevEco Studio PKGBUILD** and click **Run workflow**.
@@ -76,24 +107,37 @@ GitHub Actions:
 5. Optionally override the version and checksums (leave empty to keep the values in `PKGBUILD`):
    - `pkgver` — e.g. `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — SHA256 of the two zips; use `SKIP` to skip verification for an untested version
-6. When the run finishes, download the `devecostudio-pkg` artifact from the run page and install it locally:
-
-       sudo pacman -U devecostudio-*.pkg.tar.zst
+6. When the run finishes, download the artifact matching your platform:
+   - `devecostudio-arch` — Arch package
+   - `devecostudio-deb` — Debian/Ubuntu package
+   - `devecostudio-rpm` — Fedora/RHEL package
+   - `devecostudio-tarball` — for any other distro
 
 A GitHub account can use Actions for free on public repositories.
 
 </td></tr></thead></table>
 </details>
 
+## Installing
+
+This package targets Arch Linux (the makepkg build); the `.deb`/`.rpm`
+builds cover Debian 12+ / Ubuntu 22.04+ and Fedora / RHEL; the tarball
+works on any Linux.
+
+    # Arch
+    sudo pacman -U devecostudio-*.pkg.tar.zst
+
+    # Debian / Ubuntu
+    sudo apt install ./devecostudio_*.deb
+
+    # Fedora / RHEL
+    sudo dnf install ./devecostudio-*.rpm
+
 <details>
-<summary><b>I need to use this project on other distributions</b></summary>
+<summary><b>Other distros (via tarball)</b></summary>
 <br><table><thead><tr><td>
 
-Build online. It produces a distro-agnostic tarball
-(`devecostudio-<ver>-linux-x86_64.tar.gz`).
-
-On Debian/Ubuntu/Fedora or any other Linux, extract it and set up the launcher
-manually:
+Extract the tarball and set up the launcher manually:
 
     sudo tar -xzf devecostudio-<ver>-linux-x86_64.tar.gz -C /opt
     sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
@@ -104,9 +148,6 @@ You also need the runtime dependencies (package names vary by distro):
 `libpulse`. Chinese input support needs `fcitx5`. Unlike the Arch package,
 the bundled CLI tools are not linked into `/usr/bin` — call them by full
 path under `/opt/devecostudio/tools/bin/`.
-
-Of course, you can also use other methods you prefer, such as running 
-Arch in a container for building.
 
 </td></tr></thead></table>
 </details>

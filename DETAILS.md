@@ -535,9 +535,74 @@ are the single source of truth — the PKGBUILD references them via
   after the DMG's macOS vmoptions conversion
 
 They are NOT in `source=()` (no checksums): they are repo files like
-`devecostudio.desktop`, so edit + commit + rebuild. If the standalone
-Debian build script is accepted (PR #11), it must reference the same
-files — never re-embed them.
+`devecostudio.desktop`, so edit + commit + rebuild. The standalone
+`build.sh` must reference the same files — never re-embed them.
+
+### Standalone build (`build.sh`) + nfpm packaging
+
+`build.sh` runs the PKGBUILD on any distribution without Arch/makepkg: it
+`source`s the PKGBUILD, stubs the makepkg macros (`msg2`/`error`/`warning`),
+sets `$srcdir`/`$pkgdir`/`$startdir` to `build/src`/`build/pkg`/the repo
+root, and calls `prepare` + `package`. This is the answer to the
+standalone build.sh from PR #11 — no 700-line port, the PKGBUILD stays
+the single source of truth. **Rule: the PKGBUILD must only use the
+`msg2`/`error`/`warning` macros and the `srcdir`/`pkgdir`/`startdir`
+variables** — introducing another makepkg-only macro breaks standalone
+builds.
+
+Two modes:
+
+- **Full build** (default): extracts the sources, downloads IDEA + CPython
+  (cached under `build/downloads/`, checksums read by position from the
+  PKGBUILD's `sha256sums` — #3 idea, #5 cpython), then runs
+  `prepare` + `package`. `--clean` forces re-extraction.
+- **`--stage=DIR`**: package an existing staging tree (e.g. makepkg's
+  `pkg/`) without building. This is what the GitHub Actions workflow uses
+  after `makepkg` — no duplicated build.
+
+Both modes always produce the distro-agnostic tarball
+(`devecostudio-<ver>-linux-x86_64.tar.gz`, `gzip -1` for speed — the same
+compression the workflow uses), and optionally `.deb`/`.rpm` with **nfpm**
+(`--deb`/`--rpm`). `-h`/`--help` prints usage.
+
+What build.sh does beyond makepkg:
+
+- Extracts the sources itself (bsdtar/unzip for zips — 7z would drop the
+  SDK symlinks — and tar for the IDEA/CPython tarballs).
+- Copies `devecostudio.desktop` into `$srcdir` (makepkg does that for
+  local sources).
+- nfpm packaging: `nfpm.yaml` maps dependencies per format
+  (`overrides: deb/rpm` — Debian names vs Fedora names like
+  `libXScrnSaver`, `pulseaudio-libs`, `libxcrypt-compat`), `type: tree`
+  pulls in the whole `/opt/devecostudio` tree, and the `/usr/bin`
+  symlinks are declared individually. `scripts/postinstall.sh` runs
+  `update-desktop-database` for both deb and rpm scriptlets.
+
+Pitfalls learned:
+
+- nfpm 2.47 does **not** expand `{{ .Env.X }}` templates in the config
+  (version ends up literal in metadata) — `build.sh` pre-renders with
+  `envsubst` (`version: "${PKGVER}"`), which requires gettext.
+- The staging tree from build.sh differs from makepkg's only by the SDK's
+  static libraries (`*.a`): makepkg's fakeroot tidy removes 177 of them
+  (SDK BiSheng `libc++.a` etc.), build.sh keeps them. No functional impact
+  (static libs are link-time only).
+
+### CI artifacts (GitHub Actions)
+
+The workflow runs `makepkg -sfc` (Arch package), then
+`./build.sh --stage=pkg/devecostudio --deb --rpm` (tarball + nfpm
+deb/rpm from the same tree). nfpm is not in the Arch repos, so the
+workflow downloads the static binary from the GitHub release
+(`nfpm_2.47.0_Linux_x86_64.tar.gz`, version pinned — update deliberately).
+
+Artifacts are uploaded **separately** (not one giant bundle) so users
+only download what they need; each is ~3–4 GB:
+
+- `devecostudio-arch` — `.pkg.tar.zst`
+- `devecostudio-deb` — `.deb`
+- `devecostudio-rpm` — `.rpm`
+- `devecostudio-tarball` — `.tar.gz`
 
 ### New DevEco Studio release
 

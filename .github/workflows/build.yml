@@ -99,16 +99,50 @@ jobs:
             chmod -R u+rw pkg/opt/devecostudio
             cp pkg/usr/share/applications/devecostudio.desktop pkg/opt/
             ver=$(grep '^pkgver=' PKGBUILD | cut -d= -f2)
-            tar -C pkg/opt -czf "devecostudio-${ver}-linux-x86_64.tar.gz" devecostudio devecostudio.desktop
+            tar -C pkg/opt -I "gzip -1" -cf "devecostudio-${ver}-linux-x86_64.tar.gz" devecostudio devecostudio.desktop
             echo "Created devecostudio-${ver}-linux-x86_64.tar.gz"
           else
             echo "pkg/opt/devecostudio not found; skipping tarball"
           fi
 
-      - name: Upload package
+      - name: Build .deb and .rpm with nfpm
+        working-directory: devecostudio
+        run: |
+          # nfpm is not in the Arch repos; fetch the static binary from the
+          # GitHub release (pinned version; update deliberately).
+          curl -fL https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz \
+            | tar xz -C /usr/local/bin nfpm
+          nfpm --version | head -1
+          if [[ -d pkg/devecostudio ]]; then
+            ./build.sh --stage=pkg/devecostudio --deb --rpm
+          else
+            echo "pkg/devecostudio not found; skipping deb/rpm"
+          fi
+
+      - name: Upload Arch package
         uses: actions/upload-artifact@v4
         with:
-          name: devecostudio-pkg
-          path: |
-            devecostudio/*.pkg.tar.zst
-            devecostudio/devecostudio-*-linux-x86_64.tar.gz
+          name: devecostudio-arch
+          path: devecostudio/*.pkg.tar.zst
+          if-no-files-found: warn
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: devecostudio-deb
+          path: devecostudio/devecostudio_*.deb
+          if-no-files-found: warn
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: devecostudio-rpm
+          path: devecostudio/devecostudio-*.x86_64.rpm
+          if-no-files-found: warn
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: devecostudio-tarball
+          path: devecostudio/devecostudio-*-linux-x86_64.tar.gz
+          if-no-files-found: warn
