@@ -26,6 +26,15 @@ _expose_cli_tools=true
 # codelinter and Emulator are generic names that may collide with other
 # packages; prefix them with "h" unless you opt out.
 _hprefix_generic_tools=true
+# Shared scripts (single source of truth under scripts/); checked at the
+# start of prepare() so a missing file fails before any extraction.
+_shared_scripts=(
+  'devecostudio.sh'
+  'install-extra-sdk.sh'
+  'emulator-wrapper-patch.sh'
+  'python3-wrapper'
+  'append.vmoptions'
+)
 arch=('x86_64')
 url='https://developer.huawei.com/consumer/cn/deveco-studio/'
 license=('custom:Commercial')
@@ -59,6 +68,15 @@ sha256sums=(
 )
 
 prepare() {
+  # Shared scripts (single source of truth under scripts/); fail early —
+  # before any extraction — rather than producing a broken package.
+  for _s in "${_shared_scripts[@]}"; do
+    if [[ ! -f "$startdir/scripts/$_s" ]]; then
+      error "missing shared script: scripts/$_s (edit/commit scripts/ and rebuild)"
+      exit 1
+    fi
+  done
+
   # ── Extract Mac DMG ──
   msg2 "Extracting Mac DMG..."
   _dmg=$(find "$srcdir" -name '*.dmg' -type f | head -1)
@@ -105,6 +123,13 @@ package() {
   local _idea=$(find "$srcdir" -mindepth 1 -maxdepth 1 -type d -name 'idea-IU-*' | head -1)
   local _cli="$srcdir/command-line-tools"
   local _pkg="$pkgdir/opt/devecostudio"
+  local _scripts=(devecostudio.sh install-extra-sdk.sh emulator-wrapper-patch.sh python3-wrapper append.vmoptions)
+  for _s in "${_scripts[@]}"; do
+    if [[ ! -f "$startdir/scripts/$_s" ]]; then
+      error "missing shared script: scripts/$_s (edit/commit scripts/ and rebuild)"
+      exit 1
+    fi
+  done
 
   msg2 "Creating directory skeleton..."
   mkdir -p "$_pkg"/{bin,jbr,lib,plugins,modules,tools,license,sdk}
@@ -174,131 +199,7 @@ package() {
   # can build against either. Installing an *older* SDK also patches hvigor
   # and the IDE sync check, because both are hardwired to the bundled SDK
   # version. Not symlinked into /usr/bin on purpose.
-  cat > "$_pkg/bin/install-extra-sdk.sh" << 'SDKEOF'
-#!/bin/bash
-# Install an additional HarmonyOS SDK (e.g. 6.1.1 Release) from a Huawei
-# command-line-tools zip into /opt/devecostudio/sdk/, alongside the bundled
-# SDK. hvigor then picks the SDK by the project's compileSdkVersion — see
-# the README "Release SDK" section.
-# Usage: install-extra-sdk.sh /path/to/commandline-tools-linux-x64-<ver>.zip
-set -euo pipefail
-
-ZIP="${1:-}"
-if [[ -z "$ZIP" || ! -f "$ZIP" ]]; then
-  echo "Usage: $(basename "$0") <commandline-tools-*.zip>" >&2
-  exit 1
-fi
-
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-
-echo "Extracting SDK components from $ZIP ..."
-# Use bsdtar/unzip, not 7z: 7z refuses the SDK's symlink chains
-# (libunwind.so -> libunwind.so.1, clang -> bisheng-clang, clang-cl ->
-# clang, node's bin/npm -> ../lib/...) as "Dangerous link via another
-# link was ignored" and silently drops them, breaking native toolchains.
-if command -v bsdtar >/dev/null 2>&1; then
-  bsdtar -xf "$ZIP" -C "$TMP" \
-    "command-line-tools/sdk/default/openharmony" \
-    "command-line-tools/sdk/default/hms" \
-    "command-line-tools/sdk/default/sdk-pkg.json"
-elif command -v unzip >/dev/null 2>&1; then
-  unzip -q -o "$ZIP" \
-    "command-line-tools/sdk/default/openharmony/*" \
-    "command-line-tools/sdk/default/hms/*" \
-    "command-line-tools/sdk/default/sdk-pkg.json" -d "$TMP"
-else
-  echo "Neither bsdtar (libarchive) nor unzip is available — install one of them." >&2
-  exit 1
-fi
-SRC="$TMP/command-line-tools/sdk/default"
-[[ -d "$SRC/openharmony" ]] || { echo "No SDK found in $ZIP" >&2; exit 1; }
-
-PKG=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['data']['path'])" "$SRC/sdk-pkg.json")
-[[ -n "$PKG" ]] || { echo "Cannot read sdk-pkg.json" >&2; exit 1; }
-DST="/opt/devecostudio/sdk/$PKG"
-
-if [[ -e "$DST" ]]; then
-  echo "Already installed at $DST — remove it first to reinstall." >&2
-  exit 1
-fi
-echo "Installing to $DST (needs root) ..."
-sudo mkdir -p "$DST"
-sudo cp -a "$SRC/openharmony" "$SRC/hms" "$DST/"
-sudo cp "$SRC/sdk-pkg.json" "$DST/"
-_ver=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$DST/sdk-pkg.json" | tail -1)
-echo "OK: $PKG ($_ver)"
-
-echo "Patching hvigor and IDE sync to accept any compileSdkVersion ..."
-# The bundled hvigor validates the project's compileSdkVersion against its
-# own SUPPORT_COMPILE_VERSION ("26.0.0") and the IDE's sync check requires
-# it to equal the embedded SDK version — both would reject an older SDK
-# like 6.1.1. Neutralize both checks so the extra SDK is usable.
-python3 - << 'PYEOF'
-import glob, os, re, shutil, zipfile
-
-# 1) hvigor validate-util.js: neutralize UNSUPPORTED_COMPILESDKVERSION
-hv = "/opt/devecostudio/tools/hvigor/hvigor-ohos-plugin/src/utils/validate/validate-util.js"
-if os.path.exists(hv):
-    s = open(hv).read()
-    old = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||this._log.printErrorExit("UNSUPPORTED_COMPILESDKVERSION",[i.compileSdkVersion,o],[[version_const_js_1.VersionConst.SUPPORT_COMPILE_VERSION]])'
-    new = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||void 0'
-    if old in s:
-        open(hv, "w").write(s.replace(old, new))
-        print("  hvigor: patched")
-    elif new in s:
-        print("  hvigor: already patched")
-    else:
-        print("  hvigor: pattern not found — layout changed?")
-
-# 1b) hvigor hmos-sdk-loader.js: hvigor 6.26.4+ added
-#     COMPILE_SDK_VERSION_MISMATCH (00303313) in checkSdkVersionMatch —
-#     rejects any compileSdkVersion whose API differs from the latest
-#     support version. Neutralize it the same way.
-hsl = "/opt/devecostudio/tools/hvigor/hvigor-ohos-plugin/src/sdk/hmos-sdk-loader.js"
-if os.path.exists(hsl):
-    s = open(hsl).read()
-    old = 'o.fullVersion!==e&&_log.printErrorExit("COMPILE_SDK_VERSION_MISMATCH",[o.fullVersion,e])'
-    new = 'o.fullVersion!==e||void 0'
-    if old in s:
-        open(hsl, "w").write(s.replace(old, new))
-        print("  hvigor sdk-loader: patched")
-    elif new in s:
-        print("  hvigor sdk-loader: already patched")
-    else:
-        print("  hvigor sdk-loader: pattern not found — layout changed?")
-
-# 2) IDE project sync: HosIntegrationChecker.checkSameCompileSdkIfConfig
-#    (hos-project-mgmt-*.jar) aborts sync unless compileSdkVersion equals the
-#    embedded SDK. Flip the ifne after StringUtil.equals() to a goto.
-for jar in glob.glob("/opt/devecostudio/plugins/harmony/lib/hos-project-mgmt-*.jar"):
-    inner = "com/huawei/deveco/projectmgmt/hos/sync/integration/HosIntegrationChecker.class"
-    tmp = jar + ".tmp"
-    patched = False
-    with zipfile.ZipFile(jar) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
-        for item in zin.infolist():
-            data = zin.read(item.filename)
-            if item.filename == inner:
-                old = b"\xb8\x00\xad\x9a\x00\x0b"  # invokestatic StringUtil.equals + ifne
-                new = b"\xb8\x00\xad\xa7\x00\x0b"  # invokestatic StringUtil.equals + goto
-                n = data.count(old)
-                if n == 1:
-                    data = data.replace(old, new)
-                    patched = True
-            zout.writestr(item, data)
-    if patched:
-        shutil.move(tmp, jar)
-        print(f"  IDE sync: patched {os.path.basename(jar)}")
-    else:
-        os.remove(tmp)
-        print(f"  IDE sync: {os.path.basename(jar)} pattern not unique/found — skipped")
-PYEOF
-
-echo "Done."
-echo "Use it: set compileSdkVersion (and targetSdkVersion) in build-profile.json5,"
-echo "e.g. '6.1.1(24)' for the 6.1.1 Release SDK."
-echo "Note: after a package upgrade, re-run this script to re-apply the patches."
-SDKEOF
+  cat "$startdir/scripts/install-extra-sdk.sh" > "$_pkg/bin/install-extra-sdk.sh"
   chmod +x "$_pkg/bin/install-extra-sdk.sh"
 
   msg2 "Transforming vmoptions (macOS → Linux)..."
@@ -307,11 +208,7 @@ SDKEOF
     -e '/^-Djava.security.manager/d' \
     -e '/^-Dwsl/d' \
     "$_mac/bin/devecostudio.vmoptions" > "$_pkg/bin/devecostudio64-lin.vmoptions"
-  cat >> "$_pkg/bin/devecostudio64-lin.vmoptions" << 'VMEOF'
--Dawt.lock.fair=true
--Dsun.tools.attach.tmp.only=true
--Dglfw.im.module=fcitx
-VMEOF
+  cat "$startdir/scripts/append.vmoptions" >> "$_pkg/bin/devecostudio64-lin.vmoptions"
 
   msg2 "Replacing platform-specific components from IntelliJ IDEA (JBR, launcher, native libs)..."
 
@@ -360,20 +257,7 @@ VMEOF
   # directly, bypassing this wrapper, so the agreements must already be
   # accepted). When .emu_config is missing we run `-license accept` only
   # (the requested command is not forwarded) and print how to opt out.
-  cat > "$srcdir/emulator-wrapper-patch.sh" << 'PATCHEOF'
-mkdir -p "$HOME/Library/Huawei"
-ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
-_emu_config="$HOME/Library/Caches/Huawei/Emulator26.0/.emu_config"
-if [[ ! -f "$_emu_config" ]]; then
-    echo "Emulator software agreements not yet accepted. Displaying and accepting them now..."
-    "$all_tool_dir/emulator/Emulator" -license accept
-    echo ""
-    echo "Re-run your command to proceed."
-    echo "To opt out: truncate $_emu_config."
-    exit 0
-fi
-PATCHEOF
-  sed -i '/"$all_tool_dir\/emulator\/Emulator" "\$@"/r '"$srcdir/emulator-wrapper-patch.sh" "$_pkg/tools/bin/Emulator"
+  sed -i '/"$all_tool_dir\/emulator\/Emulator" "\$@"/r '"$startdir/scripts/emulator-wrapper-patch.sh" "$_pkg/tools/bin/Emulator"
   if [[ "$_expose_cli_tools" == "true" ]]; then
     mkdir -p "$pkgdir/usr/bin"
     # Huawei-specific names: expose as-is
@@ -401,97 +285,7 @@ PATCHEOF
   ln -sf ../../bin "$_pkg/jbr/Contents/Home/bin"
 
   # ── Wrapper script ──
-  cat > "$_pkg/bin/devecostudio.sh" << 'SHEOF'
-#!/bin/bash
-export _JAVA_AWT_WM_NONREPARENTING=1
-# Emulator uses the Qt xcb platform plugin (no wayland build shipped)
-export QT_QPA_PLATFORM=xcb
-# XWayland reports monitor scale 1.0 to JBR, so the IDE locks UI scale to
-# 1.0 — too small on HiDPI. Inject the compositor's real scale (wlr-randr,
-# needs WAYLAND_DISPLAY so run it before unsetting it) as -Dide.ui.scale.
-# DEVECO_UI_SCALE: number (override, as-is) or "off" (disable).
-_hidpi_scale=""
-case "${DEVECO_UI_SCALE:-auto}" in
-  off) ;;
-  auto)
-    _cs=""
-    command -v wlr-randr >/dev/null 2>&1 && \
-      _cs=$(wlr-randr 2>/dev/null | awk '/Scale:/{print $2; exit}')
-    if [[ "$_cs" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-      _hidpi_scale=$(LC_ALL=C awk -v s="$_cs" 'BEGIN{ q=int(s*4+0.5)/4; if (q<1.0) q=1.0; printf "%.2f", q }')
-    fi
-    ;;
-  *)
-    if [[ "$DEVECO_UI_SCALE" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-      _hidpi_scale="$DEVECO_UI_SCALE"
-    else
-      printf 'Ignoring invalid DEVECO_UI_SCALE=%q (expected auto, off, or a number)\n' \
-        "$DEVECO_UI_SCALE" >&2
-    fi
-    ;;
-esac
-if [[ -n "$_hidpi_scale" ]]; then
-  _cfg="${XDG_CONFIG_HOME:-$HOME/.config}/Huawei/DevEcoStudio26.0"
-  if mkdir -p "$_cfg"; then
-    echo "-Dide.ui.scale=$_hidpi_scale" > "$_cfg/devecostudio-hidpi.vmoptions"
-    export DEVECOSTUDIO_VM_OPTIONS="$_cfg/devecostudio-hidpi.vmoptions"
-  else
-    printf 'Unable to create the HiDPI vmoptions overlay in %s\n' "$_cfg" >&2
-  fi
-fi
-# JCEF GPU process crashes under Wayland; use the X11 backend by default
-# (DEVECO_DISABLE_X11_WORKAROUND=1 to keep Wayland).
-if [[ "${DEVECO_DISABLE_X11_WORKAROUND:-0}" != "1" ]]; then
-  unset WAYLAND_DISPLAY
-  export GDK_BACKEND=x11
-fi
-# JCEF headless + out-of-process rendering fixes blank CEF pages in some
-# environments (DEVECO_DISABLE_JCEF_HEADLESS=1 to opt out).
-_JCEF_ARGS=()
-if [[ "${DEVECO_DISABLE_JCEF_HEADLESS:-0}" != "1" ]]; then
-  _JCEF_ARGS=("-Dide.browser.jcef.headless.enabled=true" "-Dide.browser.jcef.out-of-process.enabled=true")
-fi
-# Emulator hardcodes the macOS-style image path ~/Library/Huawei/Sdk
-mkdir -p "$HOME/Library/Huawei"
-ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
-# appanalyzer python workaround (Huawei Linux gap): initRequirements
-# writes requirements/python_X/, but getPipLibraryDownloaded reads
-# requirements/Python_X/ (from `python3 --version` output). Case-
-# insensitive filesystems hide this; Linux does not → NPE. Bridge the
-# two names and seed requirements.json from the jar when missing. Also
-# fix the torch scenario: the pinned torchvision 0.21.0 needs torch 2.6
-# while the pin is torch 2.2.2 (a conflict that only resolves on
-# non-Linux because the cuda deps are Linux-gated); downgrade to 0.17.2.
-_pybin="/opt/devecostudio/plugins/app-analyzer/lib/python/bin"
-_pyver=$("$_pybin/python3" --version 2>/dev/null | awk '{print $2}')
-if [[ -n "$_pyver" ]]; then
-  _an="$HOME/.cache/Huawei/DevEcoStudio26.0/caches/appanalyzer"
-  _req_dir="$_an/pythonconfig/requirements"
-  _req_file="$_req_dir/python_$_pyver/requirements.json"
-  mkdir -p "$_req_dir"
-  ln -sfn "python_$_pyver" "$_req_dir/Python_$_pyver"
-  if [[ ! -s "$_req_file" ]]; then
-    unzip -p "/opt/devecostudio/plugins/app-analyzer/lib/hos-app-analyzer-26.0.0.821.jar" \
-      "python/${_pyver%.*}/requirements_external.json" > "$_req_file" 2>/dev/null
-  fi
-  "$_pybin/python3" - "$_req_file" << 'PYEOF'
-import json, os, sys
-p = sys.argv[1]
-if os.path.exists(p) and os.path.getsize(p) > 0:
-    try:
-        d = json.load(open(p))
-        for dep in d.get("dependencies", []):
-            if dep.get("name") == "torchvision" and dep.get("version") == "0.21.0":
-                dep["version"] = "0.17.2"
-                json.dump(d, open(p, "w"), ensure_ascii=False, indent=2)
-                break
-    except Exception:
-        pass
-PYEOF
-fi
-exec "$(dirname "$(readlink -f "$0")")/devecostudio" "${_JCEF_ARGS[@]}" "$@"
-SHEOF
-  chmod +x "$_pkg/bin/devecostudio.sh"
+  cat "$startdir/scripts/devecostudio.sh" > "$_pkg/bin/devecostudio.sh"
 
   # ── product-info.json (extracted from Mac DMG, transformed for Linux via jq) ──
   jq \
@@ -585,19 +379,7 @@ PYEOF
   # the symlink would overwrite the ELF and create a wrapper→wrapper
   # recursion loop.
   rm -f "$_pybase/bin/python3"
-  cat > "$_pybase/bin/python3" << 'WRAPEOF'
-#!/bin/bash
-# Huawei's pip flow drops deps (wheel --no-deps, install --no-index); strip.
-# exec -a preserves argv[0] so Python keeps its venv/base identity.
-args=()
-for arg in "$@"; do
-  case "$arg" in
-    --no-deps|--no-index) ;;
-    *) args+=("$arg") ;;
-  esac
-done
-exec -a "$0" /opt/devecostudio/plugins/app-analyzer/lib/python/bin/python3.12 "${args[@]}"
-WRAPEOF
+  cat "$startdir/scripts/python3-wrapper" > "$_pybase/bin/python3"
   chmod +x "$_pybase/bin/python3"
   # codelinter (and the IDE's appanalyzer) writes logs and temp files
   # under tools/codelinter/linter/result/ — make it world-writable so

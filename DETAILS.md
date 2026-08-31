@@ -515,6 +515,30 @@ The wrapper (devecostudio.sh) responsibilities, in order:
 
 ## Maintenance checklist
 
+### Shared build scripts (`scripts/`)
+
+The files that end up verbatim inside the package live in `scripts/` and
+are the single source of truth — the PKGBUILD references them via
+`$startdir/scripts/...` (makepkg cannot take subdirectory local sources):
+
+- `scripts/devecostudio.sh` — the launcher wrapper (HiDPI injection, X11
+  JCEF workaround, headless JCEF args, `~/Library/Huawei/Sdk` bridge,
+  appanalyzer requirements case-bridge + torchvision seed)
+- `scripts/install-extra-sdk.sh` — the extra-SDK installer (bsdtar/unzip
+  extraction + the three compileSdkVersion patches); installed to
+  `bin/install-extra-sdk.sh`
+- `scripts/emulator-wrapper-patch.sh` — the license auto-accept block
+  `sed`-inserted into the Emulator wrapper
+- `scripts/python3-wrapper` — the pip `--no-deps`/`--no-index` stripping
+  shim installed as the bundled python3
+- `scripts/vmoptions.append` — the Linux-specific vmoptions lines appended
+  after the DMG's macOS vmoptions conversion
+
+They are NOT in `source=()` (no checksums): they are repo files like
+`devecostudio.desktop`, so edit + commit + rebuild. If the standalone
+Debian build script is accepted (PR #11), it must reference the same
+files — never re-embed them.
+
 ### New DevEco Studio release
 
 1. Get the new `devecostudio-mac-<v>.zip` + `commandline-tools-linux-x64-<v>.zip`
