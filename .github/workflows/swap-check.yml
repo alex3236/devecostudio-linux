@@ -6,50 +6,46 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:base-devel
     steps:
-      - name: Inspect memory and disk
+      - name: Inspect host memory/disk
         run: |
-          echo "=== free -h ==="
+          echo "=== free -h (host) ==="
           free -h
           echo "=== df / ==="
           df -h /
-          echo "=== /swapfile /ci.swap existence ==="
-          ls -la /swapfile /ci.swap 2>&1 || true
+          echo "=== sudo available ==="
+          sudo -n true && echo "passwordless sudo OK"
 
-      - name: Try creating swap (current candidate logic)
+      - name: Add swap on the host
         run: |
-          set -x
-          avail=$(df -B1G / | awk 'NR==2{print $4}')
-          echo "avail: ${avail}G"
-          size=$(( avail - 6 ))
-          [[ $size -gt 14 ]] && size=14
-          echo "size: ${size}G"
-          rm -f /ci.swap
-          fallocate -l "${size}G" /ci.swap
-          chmod 600 /ci.swap
-          mkswap /ci.swap >/dev/null
-          swapon /ci.swap
+          sudo rm -f /ci.swap
+          sudo fallocate -l 14G /ci.swap
+          sudo chmod 600 /ci.swap
+          sudo mkswap /ci.swap >/dev/null
+          sudo swapon /ci.swap
+          echo "=== free -h after swapon ==="
           free -h
 
-      - name: Stress-test memory (simulate rpm peak)
+      - name: Stress-test inside an arch container (no container: block)
         run: |
-          # consume ~11 GB in one process (rpm peaks ~16G; runner RAM+3G swap
-          # should cover ~10G, the rest comes from /ci.swap)
-          python3 - <<'EOF'
-          import os, time
-          chunk = 256 * 1024 * 1024
-          bufs = []
-          try:
-              while True:
-                  bufs.append(bytearray(chunk))
-                  print(f"allocated {len(bufs)*256} MB", flush=True)
-          except MemoryError:
-              print("MemoryError at", len(bufs)*256, "MB")
-              time.sleep(3)
-          except OSError as e:
-              print("OSError:", e)
-              time.sleep(3)
-          EOF
-          echo "peak alloc ok"
+          # docker is available on the ubuntu host runner; the container
+          # inherits the host's memory + swap
+          docker run --rm archlinux:base-devel sh -c '
+            echo "=== free -h in container ==="
+            free -h
+            python3 - <<PYEOF
+            import time
+            chunk = 256 * 1024 * 1024
+            bufs = []
+            try:
+                while True:
+                    bufs.append(bytearray(chunk))
+                    print(f"allocated {len(bufs)*256} MB", flush=True)
+            except MemoryError:
+                print("MemoryError at", len(bufs)*256, "MB")
+            except OSError as e:
+                print("OSError:", e)
+            time.sleep(2)
+            PYEOF
+            echo "container stress done"
+          '
