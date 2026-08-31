@@ -75,9 +75,10 @@
 5. 可选地覆盖版本号和校验值（留空则使用 `PKGBUILD` 中的值）：
    - `pkgver` — 例如 `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — 两个 zip 的 SHA256；未测试过的版本可用 `SKIP` 跳过校验
-6. 运行结束后，从运行页面下载 `devecostudio-pkg` artifact，并在本地安装：
-
-       sudo pacman -U devecostudio-*.pkg.tar.zst
+6. 运行结束后，从运行页面下载 `devecostudio-pkg` artifact。其中包含：
+   - `devecostudio-*.pkg.tar.zst` — Arch 包：`sudo pacman -U devecostudio-*.pkg.tar.zst`
+   - `devecostudio_*.deb` — Debian/Ubuntu 包：`sudo apt install ./devecostudio_*.deb`
+   - `devecostudio-<版本>-linux-x86_64.tar.gz` — 发行版无关的 tarball（见下文）
 
 GitHub 账户在公共仓库上可以免费使用 Actions。
 
@@ -99,6 +100,51 @@ GitHub 账户在公共仓库上可以免费使用 Actions。
 还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`。中文输入支持需要 `fcitx5`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
 
 当然，你也可以用你喜欢的其他方式，比如用容器运行 Arch 用以构建。
+
+</td></tr></thead></table>
+</details>
+
+<details>
+<summary><b>我在 Debian 或 Ubuntu 上</b></summary>
+<br><table><thead><tr><td>
+
+在线构建同时还会产出原生 Debian 包（`devecostudio_<版本>_amd64.deb`），与
+Arch 包由同一套暂存目录构建。
+
+从运行页面的 artifact 下载后安装：
+
+    sudo apt install ./devecostudio_*.deb
+
+它会安装到 `/opt/devecostudio`，注册开始菜单项，并把 CLI 工具
+（`devecostudio`、`hdc`、`hvigorw`、`ohpm`、`hstack`、`hcodelinter`、
+`hemulator`）链接到 `/usr/bin`——与 Arch 包一致。
+
+支持 Debian 12+ 与 Ubuntu 22.04+。Arch 依赖已映射为对应的 Debian 包名
+（`libxss1`、`libxtst6`、`libnss3`、`libasound2`、`libcrypt1`、
+`libfreetype6`、`libpulse0`）；中文输入建议安装 `fcitx5`。若极简安装下某个
+捆绑二进制提示缺少共享库，用 `apt` 安装即可——JBR 与模拟器可能需要少量额外库。
+
+自行构建 `.deb` 请按上文运行工作流：它在 Arch 容器中构建，再用
+`./build.sh --stage pkg -d` 从 makepkg 的 `pkg/` 目录产出 `.deb` 与 tarball。
+
+**在 Debian/Ubuntu 本地构建（无需 Arch）：** 仓库自带 `build.sh`，它是
+PKGBUILD 的可移植版本，可直接在 Debian/Ubuntu 上产出 tarball（可选 `.deb`）：
+
+    # 安装依赖
+    sudo apt install p7zip-full jq curl binutils python3 libarchive-tools
+
+    # 把华为两个 zip 下载到脚本旁并重命名：
+    #   devecostudio-mac-<版本>.zip              → devecostudio-mac.zip
+    #   commandline-tools-linux-x64-<版本>.zip   → commandline-tools-linux-x64.zip
+
+    ./build.sh                    # → devecostudio-<版本>-linux-x86_64.tar.gz
+    ./build.sh -d                 # 同时构建 .deb
+    ./build.sh -v 6.1.1.280       # 构建其他版本
+
+它会自动下载 IntelliJ IDEA 与 CPython（缓存到 `build/downloads/`），完全复用
+PKGBUILD 的步骤，安装到相同的 `/opt/devecostudio` 目录。`build/` 下的所有
+中间文件会在运行结束（成功或失败）时自动删除；如需保留检查或复用下载缓存，
+可加 `--keep`。
 
 </td></tr></thead></table>
 </details>

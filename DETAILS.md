@@ -457,6 +457,85 @@ The wrapper (devecostudio.sh) responsibilities, in order:
 5. exec the real launcher via `readlink -f` on `$0` (works through the
    `/usr/bin` symlink)
 
+## Debian/Ubuntu package (.deb)
+
+The GitHub Actions workflow additionally emits a native `.deb`
+(`devecostudio_<ver>_amd64.deb`). No separate Debian build exists — the
+Arch container still runs `makepkg`, and `build.sh --stage pkg -d` then
+converts the staging tree (`pkg/`, which is already the exact filesystem
+layout) with `dpkg-deb` (this is the same `build_deb()` function that the
+standalone `build.sh -d` uses, so there is only one .deb implementation):
+
+- A generated `DEBIAN/control` carries the Debian-ized dependency list.
+  Arch names are mapped: `libxss→libxss1`, `libxtst→libxtst6`,
+  `nss→libnss3`, `alsa-lib→libasound2`, `libxcrypt-compat→libcrypt1`,
+  `freetype2→libfreetype6`, `libpulse→libpulse0`; `fcitx5` becomes
+  `Recommends`. `libasound2` also resolves on Ubuntu 24.04's
+  `libasound2t64` via the transitional package; `libcrypt1` requires
+  Debian 12+ / Ubuntu 22.04+.
+- `postinst`/`postrm` run `update-desktop-database` when
+  `desktop-file-utils` is present (no-op otherwise).
+- `dpkg-deb --build --root-owner-group` rewrites the builder-owned tree to
+  `root:root` and packages the `/usr/bin` → `/opt/devecostudio` symlinks
+  as-is. The `DEBIAN/` dir is `chmod 755` first — dpkg-deb rejects a
+  world-writable control dir.
+
+`build.sh` emits the `.deb` **before** copying a `.desktop` into
+`pkg/opt/` for the tarball; order matters to keep the package clean.
+
+## Standalone build on Debian/Ubuntu (`build.sh`)
+
+`build.sh` is a portable port of the PKGBUILD's `prepare()`/`package()` so
+the tarball can be produced on Debian/Ubuntu without Arch/makepkg. It keeps
+the same three sources (user-supplied Mac zip + CLI zip, auto-downloaded
+IDEA + CPython) and the same installed layout. Differences from the
+PKGBUILD, all mechanical:
+
+- `$srcdir` → `build/src`, `$pkgdir` → `build/pkg`, downloads cached in
+  `build/downloads`.
+- makepkg's automatic zip/tarball extraction is done explicitly. **Zip**
+  extraction uses `bsdtar` (fallback `unzip`), **not** `7z` — 7z refuses
+  "dangerous" symlinks and silently drops the SDK LLVM toolchain links
+  (`clang++ → clang`, `libunwind.so → libunwind.so.1`) and node's
+  `bin/npm → ../lib/node_modules/...` (`libarchive-tools`/`unzip` provide
+  it; makepkg itself uses bsdtar). The DMG extraction still uses `7z` (it
+  only feeds the `.dmg` → `Contents` step, matching the PKGBUILD).
+  `tar -xzf` is used for the IDEA/CPython tarballs.
+- `find ... | head -1` became `find ... -print -quit` (the script runs
+  `set -euo pipefail`, where a SIGPIPE'd `find` would abort the build).
+- The Mach-O→Linux python swap no longer assumes
+  `plugins/harmony/lib/python` exists: it first checks that path, then
+  searches the harmony plugin for any `python` dir (`find -L`), and if
+  none exists it simply `mkdir -p` the standard path and installs there
+  (the IDE's `getInnerPythonHome()` hardcodes it, so materializing it is
+  correct even when the DMG didn't ship it). The pip-stripping wrapper's
+  `exec -a` target is generated from the final location
+  (`/opt/devecostudio/<relative>/bin/python3.12`), so a version that moved
+  the appanalyzer python still gets a working replacement instead of dying
+  at `cp: cannot create directory .../lib/python/bin`.
+- Version/checksum/source overrides are environment variables
+  (`PKGVER`, `PKGREL`, `IDEA_VER`, `MAC_SHA256`, `CLI_SHA256`,
+  `IDEA_URL`/`IDEA_SHA256`, `PYTHON_URL`/`PYTHON_SHA256`,
+  `EXPOSE_CLI_TOOLS`, `HPREFIX_GENERIC_TOOLS`) plus the
+  `-m/-c/-v/-r/-o/-d/--stage` CLI flags; nothing requires a PKGBUILD to
+  exist (version/release fall back to a present PKGBUILD, with CR stripped
+  for Windows checkouts).
+- The default user-zip checksums are `SKIP` (they change per Huawei
+  release); the auto-downloaded IDEA/CPython checksums stay pinned.
+- `strip` is only run when available (binutils).
+- **Cleanup**: by default `build/` (extracted sources, staged tree, and the
+  IDEA/CPython download cache) is `rm -rf`'d on every exit — success or
+  failure — via a `trap _cleanup EXIT INT TERM`. A failed run also removes
+  any partial output files (tarball/`.deb`). `--keep` (or `KEEP_BUILD=1`)
+  disables all of this for inspection or to reuse the download cache.
+  `build_deb()` always removes its temporary `DEBIAN/` dir, even if
+  `dpkg-deb` fails, so a staged tree is never left dirty.
+
+To test locally without the ~2 GB of sources, note that the assembly reads
+only `build/src/{mac_dmg,command-line-tools,idea-IU-*,python}` — fake those
+trees and `IDEA_URL`/`PYTHON_URL` can point at local tarballs with
+`IDEA_SHA256=SKIP`/`PYTHON_SHA256=SKIP`.
+
 ## Maintenance checklist
 
 ### New DevEco Studio release

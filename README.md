@@ -76,9 +76,10 @@ GitHub Actions:
 5. Optionally override the version and checksums (leave empty to keep the values in `PKGBUILD`):
    - `pkgver` — e.g. `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — SHA256 of the two zips; use `SKIP` to skip verification for an untested version
-6. When the run finishes, download the `devecostudio-pkg` artifact from the run page and install it locally:
-
-       sudo pacman -U devecostudio-*.pkg.tar.zst
+6. When the run finishes, download the `devecostudio-pkg` artifact from the run page. It contains:
+   - `devecostudio-*.pkg.tar.zst` — Arch package: `sudo pacman -U devecostudio-*.pkg.tar.zst`
+   - `devecostudio_*.deb` — Debian/Ubuntu package: `sudo apt install ./devecostudio_*.deb`
+   - `devecostudio-<ver>-linux-x86_64.tar.gz` — distro-agnostic tarball (see below)
 
 A GitHub account can use Actions for free on public repositories.
 
@@ -107,6 +108,57 @@ path under `/opt/devecostudio/tools/bin/`.
 
 Of course, you can also use other methods you prefer, such as running 
 Arch in a container for building.
+
+</td></tr></thead></table>
+</details>
+
+<details>
+<summary><b>I'm on Debian or Ubuntu</b></summary>
+<br><table><thead><tr><td>
+
+The online build also produces a native Debian package
+(`devecostudio_<ver>_amd64.deb`), built from the same staging tree as the
+Arch package.
+
+Download it from the run's artifact page and install it:
+
+    sudo apt install ./devecostudio_*.deb
+
+It installs to `/opt/devecostudio`, registers the menu entry, and links
+the CLI tools (`devecostudio`, `hdc`, `hvigorw`, `ohpm`, `hstack`,
+`hcodelinter`, `hemulator`) into `/usr/bin` — same as the Arch package.
+
+Supported: Debian 12+ and Ubuntu 22.04+. The Arch dependencies are mapped
+to their Debian equivalents (`libxss1`, `libxtst6`, `libnss3`,
+`libasound2`, `libcrypt1`, `libfreetype6`, `libpulse0`); `fcitx5` is
+recommended for Chinese input. If a bundled binary reports a missing
+shared library on a minimal install, install it with `apt` — the JBR and
+emulator can pull in a few extras.
+
+To build the `.deb` yourself, run the workflow as described above; it runs
+in an Arch container and emits the `.deb` and tarball from makepkg's `pkg/`
+tree with `./build.sh --stage pkg -d`.
+
+**Build locally on Debian/Ubuntu (no Arch needed):** the repo ships
+`build.sh`, a portable port of the PKGBUILD that produces the tarball (and
+optionally the `.deb`) directly on Debian/Ubuntu:
+
+    # Dependencies
+    sudo apt install p7zip-full jq curl binutils python3 libarchive-tools
+
+    # Download the two Huawei zips next to this script:
+    #   devecostudio-mac-<ver>.zip  →  rename to devecostudio-mac.zip
+    #   commandline-tools-linux-x64-<ver>.zip  →  rename to commandline-tools-linux-x64.zip
+
+    ./build.sh                    # → devecostudio-<ver>-linux-x86_64.tar.gz
+    ./build.sh -d                 # also build a .deb
+    ./build.sh -v 6.1.1.280       # build a different version
+
+It auto-downloads IntelliJ IDEA and CPython (cached under `build/downloads/`),
+reuses the exact PKGBUILD steps, and installs the same `/opt/devecostudio`
+tree. All intermediate files under `build/` are removed automatically when
+the run finishes (success or failure); pass `--keep` to retain them for
+inspection or to reuse the download cache.
 
 </td></tr></thead></table>
 </details>

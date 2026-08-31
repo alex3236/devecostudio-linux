@@ -42,7 +42,8 @@ jobs:
             git \
             jq \
             p7zip \
-            sudo
+            sudo \
+            dpkg  # dpkg-deb, used to produce a .deb for Debian/Ubuntu
 
       - name: Create build user
         run: |
@@ -88,22 +89,13 @@ jobs:
             makepkg -sfc --noconfirm
           '
 
-      - name: Create tarball for other distributions
+      - name: Build .deb and tarball for other distributions
         working-directory: devecostudio
         run: |
-          if [[ -d pkg/opt/devecostudio ]]; then
-            # pkg/opt/devecostudio is the complete /opt/devecostudio tree;
-            # ship it as a distro-agnostic tarball so non-Arch users can
-            # extract it to /opt without a package manager. The .desktop
-            # file is included at the tarball root.
-            chmod -R u+rw pkg/opt/devecostudio
-            cp pkg/usr/share/applications/devecostudio.desktop pkg/opt/
-            ver=$(grep '^pkgver=' PKGBUILD | cut -d= -f2)
-            tar -C pkg/opt -czf "devecostudio-${ver}-linux-x86_64.tar.gz" devecostudio devecostudio.desktop
-            echo "Created devecostudio-${ver}-linux-x86_64.tar.gz"
-          else
-            echo "pkg/opt/devecostudio not found; skipping tarball"
-          fi
+          # makepkg already produced pkg/ (the staged tree). build.sh --stage
+          # emits both the Debian package and the distro-agnostic tarball from
+          # it without re-running the Arch build.
+          ./build.sh --stage pkg -d -o .
 
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -111,4 +103,5 @@ jobs:
           name: devecostudio-pkg
           path: |
             devecostudio/*.pkg.tar.zst
+            devecostudio/devecostudio_*.deb
             devecostudio/devecostudio-*-linux-x86_64.tar.gz
