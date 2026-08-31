@@ -27,7 +27,7 @@ jobs:
           [[ $size -gt 14 ]] && size=14
           echo "size: ${size}G"
           rm -f /ci.swap
-          truncate -s "${size}G" /ci.swap
+          fallocate -l "${size}G" /ci.swap
           chmod 600 /ci.swap
           mkswap /ci.swap >/dev/null
           swapon /ci.swap
@@ -47,6 +47,9 @@ jobs:
                   print(f"allocated {len(bufs)*256} MB", flush=True)
           except MemoryError:
               print("MemoryError at", len(bufs)*256, "MB")
+              time.sleep(3)
+          except OSError as e:
+              print("OSError:", e)
               time.sleep(3)
           EOF
           echo "peak alloc ok"
