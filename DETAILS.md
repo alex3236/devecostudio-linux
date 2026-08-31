@@ -11,7 +11,7 @@ view; this is the developer-facing view.
 |---|---|---|
 | **Mac DMG** (`devecostudio-mac.zip`) | `lib/*.jar`, `plugins/`, `modules/`, `license/`, `build.txt`, `bin/devecostudio.svg`, `bin/idea.properties`, `bin/devecostudio.vmoptions`, `Resources/product-info.json`, `tools/UxTestService` | Huawei ships DevEco Studio for Windows, macOS, and Linux. The Windows installer is an `.exe` that is painful to extract and lags in version; the Mac DMG extracts trivially with `7z x` and all of these files are platform-independent (Java bytecode, resources, templates). |
 | **JetBrains IDEA tarball** (`idea-${_ideaver}.tar.gz`) | `jbr/`, `bin/idea` launcher, `bin/fsnotifier`, `lib/native/linux-x86_64/`, `lib/pty4j/linux/`, `lib/jna/amd64/`, `lib/skiko-awt-runtime-all/` | The macOS-specific bits (JBR, launcher, native `.so`s) are replaced with Linux ones. DevEco's build number is pinned to a specific IDEA baseline — see "IDEA version matching" below. |
-| **Command Line Tools for Linux** (`commandline-tools-linux-x64.zip`) | `sdk/`, `tool/node/`, `hvigor/`, `ohpm/`, `hstack/`, `codelinter/`, `emulator/`, `bin/` wrappers | The CLI zip already contains Linux-native versions of every tool, and its SDK is the one the IDE needs. |
+| **Command Line Tools for Linux** (`commandline-tools-linux-x64.zip`) | `sdk/`, `tool/node/`, `hvigor/`, `ohpm/`, `hstack/`, `codelinter/`, `emulator/`, `arktsdoc/`, `bin/` wrappers | The CLI zip already contains Linux-native versions of every tool, and its SDK is the one the IDE needs. |
 
 Everything from the Mac DMG that is not on the list above is either
 platform-native (and unusable on Linux) or duplicated by the CLI: `jbr`,
@@ -244,6 +244,9 @@ skips the injection and leaves scaling to the JVM.
 
 Mac DMG files ship 700; `cp -a` preserves that, so the package does a
 global `chmod 755` on dirs and `644` on files, then restores exec bits.
+The chmods use `find -exec chmod {} +` (batched), not the per-file `{} \;`
+form — with ~130k files the per-file form forks a process per file and is
+the slowest part of the build.
 The exec-bit restore uses **Python reading the first 256 bytes** (ELF
 magic `\x7fELF`, or a shebang `#!` anywhere in the head — some CLI scripts
 put a copyright comment before the shebang, notably `hstack`). The `file`
@@ -268,12 +271,13 @@ is deliberately **not** stripped (contains cross-compiled ARM binaries).
 
 ### Bundled python is macOS-only (appanalyzer)
 
-The Mac DMG ships a full python under `plugins/harmony/lib/python/` (Mach-O
+The Mac DMG ships a full python under `plugins/app-analyzer/lib/python/`
+(Mach-O
 binaries plus `com.apple.cs.CodeSignature` xattr sidecar files — proof it
 was never meant for Linux). The IDE's appanalyzer (`hos-app-analyzer` jar)
 uses it for venv/pip:
 
-- `PathUtil.getInnerPythonHome()` → `<IDE>/plugins/harmony/lib/python/bin`
+- `PathUtil.getInnerPythonHome()` → `<IDE>/plugins/app-analyzer/lib/python/bin`
 - `PythonConfigUtil.PYTHON_COMMAND` → `python3`
 - `createVenv` runs `<bin>/python3 -m venv --clear <venv>` — execve
   refuses Mach-O, so venv creation always failed with Huawei's misleading
@@ -356,16 +360,35 @@ deleted locally.)
 ### UxTestService
 
 Mac-only tool in the DMG (Python, cross-platform). Comes from the DMG, not
-the CLI.
+the CLI. (The 26.0.0.821 Mac app still ships it under
+`Contents/tools/UxTestService`.)
 
-### Dual SDK: 26.0.0 Beta vs 6.1.1 Release
+### app-analyzer moved to its own plugin (26.0.0.821)
 
-DevEco 26.0.0's SDK components ship as Beta2 (`releaseType: Beta2` in the
-`oh-uni-package.json` / `uni-package.json` metadata), so `pack.info` and
-`module.json` of built artifacts declare `Beta2`. Until 26.0.0 goes stable,
-app submission may require a Release SDK, so the package supports building
-against an additional 6.1.1 (or any other) Release SDK, switchable per
-project via `compileSdkVersion`.
+The apptest/appanalyzer jar set and its bundled Mach-O python moved from
+`plugins/harmony/lib/` to a dedicated `plugins/app-analyzer/` plugin. The
+PKGBUILD's python replacement and the wrapper's venv workaround now target
+`plugins/app-analyzer/lib/python`. Everything else (the case-symlink bridge,
+the venv-name 3.12.10 fallback, the pip wrapper) is unchanged.
+
+### arktsdoc (new in 26.0.0.821)
+
+An ArkTS documentation generator shipped in the CLI tools. `arktsdoc-deveco`
+resolves its root as `ARKTSDOC_HOME/../..` = `/opt/devecostudio`, so its
+`tools/node` + `sdk` paths are already correct. The main `arktsdoc` wrapper
+resolves `SHELLDIR/../..` = `/opt/devecostudio/tools` and references
+`tool/node` + `sdk` relative to that — the PKGBUILD rewrites them like
+codelinter's (`$ROOT_DIR/tool/node` → `$ROOT_DIR/node`, `$ROOT_DIR/sdk` →
+`$ROOT_DIR/../sdk`). Both are exposed via `tools/bin/arktsdoc`.
+
+### Dual SDK: 26.0.0 vs older (6.1.1 etc.)
+
+DevEco 26.0.0 shipped SDK components as Beta2 (`releaseType: Beta2`,
+26.0.0.32), so built artifacts declared `Beta2`. 26.0.0.821 (the current
+pkgver) ships a **Release** SDK (26.0.0.105) — the default install now
+produces `Release` artifacts and needs no patches. The extra-SDK machinery
+remains for older SDKs (e.g. 6.1.1 Release), switchable per project via
+`compileSdkVersion`.
 
 **Why the metadata edits failed (don't try again):**
 
@@ -378,43 +401,59 @@ project via `compileSdkVersion`.
   components by `HosSdkVersion.equals(compileSdkVersion-derived)`; a
   mismatch yields `SDK component missing`.
 
-**The one real blocker and its patch:**
+**The two real blockers and where their patches live:**
 
-hvigor 26.0.0 validates the project's `compileSdkVersion` against
-`VersionConst.SUPPORT_COMPILE_VERSION` (= `"26.0.0"`) in
-`ValidateUtil.integrationVersionCheck()` (`validate-util.js`), rejecting
-anything else with `UNSUPPORTED_COMPILESDKVERSION`. The PKGBUILD neutralizes
-exactly that one check with a Python string replacement (the check's
-`printErrorExit` becomes `||void 0`). Backup of the pristine file:
+1. hvigor 26.0.0 validates the project's `compileSdkVersion` against
+   `VersionConst.SUPPORT_COMPILE_VERSION` (= `"26.0.0"`) in
+   `ValidateUtil.integrationVersionCheck()` (`validate-util.js`), rejecting
+   anything else with `UNSUPPORTED_COMPILESDKVERSION`.
+2. The IDE's project sync (`HosIntegrationChecker.checkSameCompileSdkIfConfig`
+   in `plugins/harmony/lib/hos-project-mgmt-*.jar`) requires every product's
+   `compileSdkVersion` to equal the embedded SDK version (the max of
+   `sdk-hos-core-osVersionMapperV2.properties` = `"26.0.0"`) and aborts sync
+   with `SyncInterruptException` otherwise.
+
+Both checks are hardwired to the bundled SDK version, so **neither patch is
+applied by default** — `bin/install-extra-sdk.sh` applies them when it
+installs an older SDK:
+
+- hvigor: Python string replacement turning the `printErrorExit` into
+  `||void 0` (pattern `...isEqualApiVersion)(r,s)&&...||void 0`);
+- IDE jar: single-byte patch in `HosIntegrationChecker.class` — the `ifne`
+  after `StringUtil.equals()` becomes `goto` (byte sequence
+  `b8 00 ad 9a 00 0b` → `b8 00 ad a7 00 0b`, verified identical in
+  26.0.0.621 and 26.0.0.821), so the error notification is never reached.
+
+Both patches are idempotent. Backup of the pristine hvigor file:
 `hvigor-patch-backup/validate-util.js.orig-26.0.0` in the repo root.
 
-With the check gone, hvigor scans the whole SDK root
+With the checks gone, hvigor scans the whole SDK root
 (`/opt/devecostudio/sdk/`) for components of any version and selects the
 set whose `HosSdkVersion` matches the project's `compileSdkVersion`. The
-artifact's `releaseType` then follows the *selected SDK's own* metadata
-(6.1.1 → `Release`, 26.0.0 → `Beta2`) — no `getReleaseType` patch needed.
+artifact's `releaseType` follows the *selected SDK's own* metadata
+(6.1.1 → `Release`, 26.0.0 → `Release`) — no `getReleaseType` patch needed.
 
 **Installing the extra SDK** — `bin/install-extra-sdk.sh` (bundled, not on
 PATH): extracts `sdk/default/{openharmony,hms,sdk-pkg.json}` from a Huawei
 commandline-tools zip, reads the SDK's `data.path` (e.g. `HarmonyOS-6.1.1`)
-from `sdk-pkg.json` to name the destination directory, and copies it under
-`/opt/devecostudio/sdk/<path>` with sudo. The directory name comes from the
-zip, so the same script works for any future version. Note the `-x!`/include
-list: only `openharmony`, `hms`, `sdk-pkg.json` are installed — no other
-SDK channels.
+from `sdk-pkg.json` to name the destination directory, copies it under
+`/opt/devecostudio/sdk/<path>` with sudo, then applies the two patches
+above. The directory name comes from the zip, so the same script works for
+any version. After a package upgrade the patches are gone — re-run the
+script (or use `-f`-style reinstall by removing the target first) to
+re-apply.
 
-**Verified behavior** (26.0.0.621-9):
+**Verified behavior** (26.0.0.621-9 and 26.0.0.821-1):
 
 | project compileSdkVersion | SDK used | artifact |
 |---|---|---|
 | `'6.1.1(24)'` | HarmonyOS-6.1.1 | `Release`, compileSdkVersion 6.1.1.125 |
-| `'26.0.0'` (or unset) | default | `Beta2`, compileSdkVersion 26.0.0.32 |
+| `'26.0.0'` (or unset) | default | `Release`, compileSdkVersion 26.0.0.105 |
 
 **Caveats:**
 
-- After a package upgrade, restart any running hvigor daemon
-  (`pkill -f daemon-process-boot-script`) or the old (unpatched) code stays
-  in memory.
+- After the patches are applied, restart any running hvigor daemon
+  (`pkill -f daemon-process-boot-script`) so the new code is loaded.
 - Code using API 26-only interfaces (e.g. `@ohos.multimedia.camera`
   `VideoSession`/`PhotoSession` — 26.0.0 made `VideoSession` a superset of
   `PhotoSession`; 6.1.1's `VideoSession` lacks the 5 manual-control mixins)
@@ -441,9 +480,9 @@ SDK channels.
 ├── build.txt
 ├── product-info.json           ← jq-transformed from DMG
 └── tools/
-    ├── bin/                    ← CLI wrappers (readlink-fixed)
+    ├── bin/                    ← CLI wrappers (readlink-fixed) + arktsdoc
     ├── node/ + lib/node_modules (2 symlinks above)
-    ├── hvigor/ ohpm/ hstack/ codelinter/ emulator/ UxTestService/
+    ├── hvigor/ ohpm/ hstack/ codelinter/ emulator/ arktsdoc/ UxTestService/
 /usr/bin/devecostudio → /opt/devecostudio/bin/devecostudio.sh
 /usr/bin/hdc → /opt/devecostudio/sdk/default/openharmony/toolchains/hdc (always)
 /usr/bin/{hvigorw,ohpm,hstack,hcodelinter,hemulator} (configurable)

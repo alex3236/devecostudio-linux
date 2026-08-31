@@ -122,9 +122,10 @@ also work standalone from a terminal. By default the package symlinks them
 into `/usr/bin`:
 
 - Always exposed: `devecostudio`, `hdc`
-- Exposed by default: `hvigorw`, `ohpm`, `hstack`, `hcodelinter`, `hemulator`;
+- Exposed by default: `hvigorw`, `ohpm`, `hstack`, `hcodelinter`, `hemulator`, `harktsdoc`;
 
-`Emulator` and `codelinter` are prefixed to avoid possible collisions.
+`Emulator`, `codelinter` and `arktsdoc` are prefixed to avoid possible
+collisions.
 
 <details>
 <summary><b>Adjusting the symlink behavior</b></summary>
@@ -141,13 +142,11 @@ Both behaviors are controlled by variables at the top of the PKGBUILD:
 </td></tr></thead></table>
 </details>
 
-### Release SDK
+### Extra SDKs (older versions)
 
-The bundled IDE ships HarmonyOS 26.0.0 (Beta2). Until it goes stable, app
-submission may require building against a release (Release) SDK.
-
-An additional Release SDK (6.1.1 or another version) can be installed and
-used per project.
+The bundled SDK is HarmonyOS 26.0.0 (Release). An older SDK (e.g. 6.1.1
+Release) can be installed alongside and used per project — useful for
+reproducing issues or building against an older API level.
 
 <details>
 <summary><b>How?</b></summary>
@@ -168,11 +167,10 @@ used per project.
 
 </td></tr></thead></table>
 
-The package patches hvigor so any `compileSdkVersion` is accepted; the built
-artifact's `releaseType` follows the SDK it was compiled against (6.1.1 →
-`Release`, 26.0.0 → `Beta2`). After a package upgrade, restart any running
-hvigor daemon (`pkill -f daemon-process-boot-script`) so the patch takes
-effect.
+Installing an older SDK also patches two things so it can actually be used:
+hvigor's `compileSdkVersion` validation and the IDE's project-sync check
+(both are hardwired to the bundled SDK version). The patches are applied
+only by `install-extra-sdk.sh` — a default install stays pristine.
 
 Note: source code using API 26-only interfaces (e.g. newer camera APIs)
 will not compile against 6.1.1 — adjust or guard the code accordingly.

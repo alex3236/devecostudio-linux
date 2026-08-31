@@ -112,9 +112,9 @@ GitHub 账户在公共仓库上可以免费使用 Actions。
 IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端使用。默认情况下，包会把它们软链到 `/usr/bin`：
 
 - 始终暴露的命令：`devecostudio`, `hdc`
-- 默认暴露的命令：`hvigorw`, `ohpm`, `hstack`, `hcodelinter`, `hemulator`；
+- 默认暴露的命令：`hvigorw`, `ohpm`, `hstack`, `hcodelinter`, `hemulator`, `harktsdoc`；
 
-其中 `Emulator` 和 `codelinter` 添加了前缀以避免可能的冲突。
+其中 `Emulator`、`codelinter` 和 `arktsdoc` 添加了前缀以避免可能的冲突。
 
 <details>
 <summary><b>调整这些软链行为</b></summary>
@@ -131,11 +131,9 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 </td></tr></thead></table>
 </details>
 
-### Release SDK
+### 额外 SDK（旧版本）
 
-此分支 IDE 为 26.0.0（Beta2）。在其成为正式版之前，应用上架可能要求使用正式版（Release）SDK 编译。
-
-可以额外安装 6.1.1 或其他版本的 Release SDK，按项目切换使用。
+内置 SDK 为 HarmonyOS 26.0.0（Release）。可以额外安装旧版 SDK（如 6.1.1 Release），按项目切换使用——便于复现问题或针对旧 API 版本构建。
 
 <details>
 <summary><b>怎么做？</b></summary>
@@ -156,7 +154,7 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 
 </td></tr></thead></table>
 
-包内已对 hvigor 打补丁，接受任意 `compileSdkVersion`；产物的 `releaseType` 跟随编译所用 SDK（6.1.1 → `Release`，26.0.0 → `Beta2`）。升级软件包后，若 hvigor 守护进程仍在运行，需重启（`pkill -f daemon-process-boot-script`）补丁才能生效。
+安装旧版 SDK 时，脚本会一并修补两处限制使其可用：hvigor 的 `compileSdkVersion` 校验和 IDE 同步检查（两者都硬编码为内置 SDK 版本）。补丁只在执行 `install-extra-sdk.sh` 时应用——默认安装保持原样。
 
 注意：使用了 API 26 独有接口的源码（如新版相机 API）无法用 6.1.1 编译，需要相应调整或防护。
 </details>

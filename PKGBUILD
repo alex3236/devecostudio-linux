@@ -15,9 +15,9 @@
 
 pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
-pkgver=26.0.0.621
+pkgver=26.0.0.821
 _ideaver=2026.1.3
-pkgrel=9
+pkgrel=1
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -51,8 +51,8 @@ source=(
   "cpython-3.12.10+20250409-x86_64-unknown-linux-gnu-install_only.tar.gz::https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10+20250409-x86_64-unknown-linux-gnu-install_only.tar.gz"
 )
 sha256sums=(
-  '5d67a2cfdd7b984a9c9f64e5abc6e082c5e3bc958833a92a55370cc623799ce1'
-  '0cea7ad6cc1af98ac701b9c61b7c9aae2d0f2104749a80ae84c1f6ca0fc17555'
+  '738195cabf9777db0e5aeee5096ea7ed3f1f78db0f31c3c25ae09adfc93bea8a'
+  '58da7359019e9360a8bb82da0cd1d3b3b26fedc338379f257849f2162e3ac1fc'
   'a6f049716da1d09d9e0ec1500c60bf01a5ff8a0fe2419178dd1ff2fdb2b77563'
   'b530705424c7fdd61c3eaa477d6c79643e5d9d0cf7ecadc8f6e96559b7c6dc2d'
   'e9cf6f7da499a4400ba30ae1da8f7ef25ce97827bd8c1084717aa05438035186'
@@ -75,6 +75,7 @@ prepare() {
     -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/llvm' \
     -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/profiler' \
     -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/node' \
+    -x!'DevEco-Studio/DevEco-Studio.app/Contents/tools/arktsdoc' \
     2>&1 | grep -v "^\s*$" | grep -v "Sub items Errors" | tail -3
   _mac="$srcdir/mac_dmg/DevEco-Studio/DevEco-Studio.app/Contents"
   if [[ ! -d "$_mac/plugins" || ! -f "$_mac/Resources/product-info.json" ]]; then
@@ -121,20 +122,25 @@ package() {
   # modules
   cp -a "$_mac/modules/"* "$_pkg/modules/"
 
-  # tools: prefer CLI (Linux) versions where available; UxTestService is
-  # Mac-only (Python, cross-platform) and stays from the DMG.
   # hvigor/ohpm/hstack/codelinter/emulator/node from CLI tools
   cp -a "$_cli/hvigor/" "$_pkg/tools/hvigor"
   cp -a "$_cli/ohpm/" "$_pkg/tools/ohpm"
   cp -a "$_cli/hstack/" "$_pkg/tools/hstack"
   cp -a "$_cli/codelinter/" "$_pkg/tools/codelinter"
   cp -a "$_cli/emulator/" "$_pkg/tools/emulator"
+  # arktsdoc (new in 26.0.0.821): ArkTS doc generator, Linux node wrapper.
+  # arktsdoc-deveco resolves ARKTSDOC_HOME/../.. = /opt/devecostudio, so its
+  # tools/node + sdk paths are already correct; arktsdoc (main wrapper)
+  # resolves SHELLDIR/../.. = /opt/devecostudio/tools and references
+  # tool/node + sdk relative to that, so rewrite them like codelinter's.
+  cp -a "$_cli/arktsdoc/" "$_pkg/tools/arktsdoc"
+  sed -i 's|\$ROOT_DIR/tool/node|\$ROOT_DIR/node|; s|\$ROOT_DIR/sdk|\$ROOT_DIR/../sdk|' "$_pkg/tools/arktsdoc/bin/arktsdoc"
   # Huawei's code only distinguishes Mac vs non-Mac; the non-Mac branch
   # hardcodes the "Emulator.exe" name. Symlink it to the real binary so
   # Device Manager and debugging work on Linux.
   ln -sf Emulator "$_pkg/tools/emulator/Emulator.exe"
   cp -a "$_cli/tool/node/" "$_pkg/tools/node/"
-  # symlink bin/* to tools/node (IDE expects node/npm/npx/corepack alongside bin/)
+  # node symlinks (IDE expects node/npm/npx/corepack alongside bin/)
   (cd "$_pkg/tools/node" && ln -sf bin/* .)
   # The IDE's node version check (getNpmVersionFast) looks for npm's
   # package.json at <parentDir>/lib/node_modules/npm/package.json where
@@ -163,15 +169,17 @@ package() {
 
   msg2 "Writing install-extra-sdk.sh (SDK switcher, not on PATH)..."
   # Installs an additional HarmonyOS SDK (e.g. 6.1.1 Release) from a Huawei
-  # commandline-tools zip into sdk/<path>, alongside the bundled 26.0.0 Beta
+  # commandline-tools zip into sdk/<path>, alongside the bundled 26.0.0
   # SDK. hvigor picks the SDK by the project's compileSdkVersion, so projects
-  # can build against either. Not symlinked into /usr/bin on purpose.
+  # can build against either. Installing an *older* SDK also patches hvigor
+  # and the IDE sync check, because both are hardwired to the bundled SDK
+  # version. Not symlinked into /usr/bin on purpose.
   cat > "$_pkg/bin/install-extra-sdk.sh" << 'SDKEOF'
 #!/bin/bash
 # Install an additional HarmonyOS SDK (e.g. 6.1.1 Release) from a Huawei
 # command-line-tools zip into /opt/devecostudio/sdk/, alongside the bundled
-# 26.0.0 Beta SDK. hvigor then picks the SDK by the project's
-# compileSdkVersion — see the README "Release SDK" section.
+# SDK. hvigor then picks the SDK by the project's compileSdkVersion — see
+# the README "Release SDK" section.
 # Usage: install-extra-sdk.sh /path/to/commandline-tools-linux-x64-<ver>.zip
 set -euo pipefail
 
@@ -207,8 +215,59 @@ sudo cp -a "$SRC/openharmony" "$SRC/hms" "$DST/"
 sudo cp "$SRC/sdk-pkg.json" "$DST/"
 _ver=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$DST/sdk-pkg.json" | tail -1)
 echo "OK: $PKG ($_ver)"
+
+echo "Patching hvigor and IDE sync to accept any compileSdkVersion ..."
+# The bundled hvigor validates the project's compileSdkVersion against its
+# own SUPPORT_COMPILE_VERSION ("26.0.0") and the IDE's sync check requires
+# it to equal the embedded SDK version — both would reject an older SDK
+# like 6.1.1. Neutralize both checks so the extra SDK is usable.
+python3 - << 'PYEOF'
+import glob, os, re, shutil, zipfile
+
+# 1) hvigor validate-util.js: neutralize UNSUPPORTED_COMPILESDKVERSION
+hv = "/opt/devecostudio/tools/hvigor/hvigor-ohos-plugin/src/utils/validate/validate-util.js"
+if os.path.exists(hv):
+    s = open(hv).read()
+    old = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||this._log.printErrorExit("UNSUPPORTED_COMPILESDKVERSION",[i.compileSdkVersion,o],[[version_const_js_1.VersionConst.SUPPORT_COMPILE_VERSION]])'
+    new = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||void 0'
+    if old in s:
+        open(hv, "w").write(s.replace(old, new))
+        print("  hvigor: patched")
+    elif new in s:
+        print("  hvigor: already patched")
+    else:
+        print("  hvigor: pattern not found — layout changed?")
+
+# 2) IDE project sync: HosIntegrationChecker.checkSameCompileSdkIfConfig
+#    (hos-project-mgmt-*.jar) aborts sync unless compileSdkVersion equals the
+#    embedded SDK. Flip the ifne after StringUtil.equals() to a goto.
+for jar in glob.glob("/opt/devecostudio/plugins/harmony/lib/hos-project-mgmt-*.jar"):
+    inner = "com/huawei/deveco/projectmgmt/hos/sync/integration/HosIntegrationChecker.class"
+    tmp = jar + ".tmp"
+    patched = False
+    with zipfile.ZipFile(jar) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == inner:
+                old = b"\xb8\x00\xad\x9a\x00\x0b"  # invokestatic StringUtil.equals + ifne
+                new = b"\xb8\x00\xad\xa7\x00\x0b"  # invokestatic StringUtil.equals + goto
+                n = data.count(old)
+                if n == 1:
+                    data = data.replace(old, new)
+                    patched = True
+            zout.writestr(item, data)
+    if patched:
+        shutil.move(tmp, jar)
+        print(f"  IDE sync: patched {os.path.basename(jar)}")
+    else:
+        os.remove(tmp)
+        print(f"  IDE sync: {os.path.basename(jar)} pattern not unique/found — skipped")
+PYEOF
+
+echo "Done."
 echo "Use it: set compileSdkVersion (and targetSdkVersion) in build-profile.json5,"
 echo "e.g. '6.1.1(24)' for the 6.1.1 Release SDK."
+echo "Note: after a package upgrade, re-run this script to re-apply the patches."
 SDKEOF
   chmod +x "$_pkg/bin/install-extra-sdk.sh"
 
@@ -295,9 +354,11 @@ PATCHEOF
     if [[ "$_hprefix_generic_tools" == "true" ]]; then
       ln -sf /opt/devecostudio/tools/bin/codelinter "$pkgdir/usr/bin/hcodelinter"
       ln -sf /opt/devecostudio/tools/bin/Emulator "$pkgdir/usr/bin/hemulator"
+      ln -sf /opt/devecostudio/tools/bin/arktsdoc "$pkgdir/usr/bin/harktsdoc"
     else
       ln -sf /opt/devecostudio/tools/bin/codelinter "$pkgdir/usr/bin/codelinter"
       ln -sf /opt/devecostudio/tools/bin/Emulator "$pkgdir/usr/bin/Emulator"
+      ln -sf /opt/devecostudio/tools/bin/arktsdoc "$pkgdir/usr/bin/arktsdoc"
     fi
   fi
 
@@ -371,7 +432,7 @@ ln -sfn "$HOME/.Huawei/Sdk" "$HOME/Library/Huawei/Sdk"
 # fix the torch scenario: the pinned torchvision 0.21.0 needs torch 2.6
 # while the pin is torch 2.2.2 (a conflict that only resolves on
 # non-Linux because the cuda deps are Linux-gated); downgrade to 0.17.2.
-_pybin="/opt/devecostudio/plugins/harmony/lib/python/bin"
+_pybin="/opt/devecostudio/plugins/app-analyzer/lib/python/bin"
 _pyver=$("$_pybin/python3" --version 2>/dev/null | awk '{print $2}')
 if [[ -n "$_pyver" ]]; then
   _an="$HOME/.cache/Huawei/DevEcoStudio26.0/caches/appanalyzer"
@@ -380,7 +441,7 @@ if [[ -n "$_pyver" ]]; then
   mkdir -p "$_req_dir"
   ln -sfn "python_$_pyver" "$_req_dir/Python_$_pyver"
   if [[ ! -s "$_req_file" ]]; then
-    unzip -p "/opt/devecostudio/plugins/harmony/lib/hos-app-analyzer-26.0.0.621.jar" \
+    unzip -p "/opt/devecostudio/plugins/app-analyzer/lib/hos-app-analyzer-26.0.0.821.jar" \
       "python/${_pyver%.*}/requirements_external.json" > "$_req_file" 2>/dev/null
   fi
   "$_pybin/python3" - "$_req_file" << 'PYEOF'
@@ -443,8 +504,10 @@ SHEOF
 
   msg2 "Fixing permissions (Mac DMG files have 700)..."
   # Mac DMG preserves 700 permissions via cp -a; fix for world-readability
-  find "$_pkg" -type d -exec chmod 755 {} \;
-  find "$_pkg" -type f -exec chmod 644 {} \;
+  # (-exec ... {} + batches files per chmod call; the per-file {} \; form
+  # forks a process per file and is the slowest part of the build)
+  find "$_pkg" -type d -exec chmod 755 {} +
+  find "$_pkg" -type f -exec chmod 644 {} +
   # Restore executability for all ELF binaries and shebang scripts.
   # Use Python (not `file`) to avoid crashes on the huge file tree.
   python3 - "$_pkg" << 'PYEOF'
@@ -466,26 +529,6 @@ for dirpath, dirnames, filenames in os.walk(root):
             pass
 PYEOF
 
-  msg2 "Patching hvigor to accept any compileSdkVersion..."
-  # DevEco 26.0.0's hvigor rejects compileSdkVersion values other than its
-  # own SUPPORT_COMPILE_VERSION ("26.0.0"), which makes it impossible to
-  # build against an additional SDK like 6.1.1 (installed via
-  # bin/install-extra-sdk.sh). Neutralize that single check; the SDK is then
-  # selected by compileSdkVersion and the artifact's releaseType follows the
-  # chosen SDK's metadata (6.1.1 → Release, 26.0.0 → Beta2).
-  python3 - "$_pkg/tools/hvigor/hvigor-ohos-plugin/src/utils/validate/validate-util.js" << 'PYEOF'
-import sys
-p = sys.argv[1]
-old = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||this._log.printErrorExit("UNSUPPORTED_COMPILESDKVERSION",[i.compileSdkVersion,o],[[version_const_js_1.VersionConst.SUPPORT_COMPILE_VERSION]])'
-new = '(0,sdkmanager_common_1.isEqualApiVersion)(r,s)&&0===(0,sdkmanager_common_1.compareVersion)(t.api,n.api)||void 0'
-s = open(p).read()
-if old in s:
-    open(p, 'w').write(s.replace(old, new))
-    print('  hvigor patch applied')
-else:
-    print('  hvigor patch: pattern not found (layout changed?)')
-PYEOF
-
   msg2 "Cleaning platform cruft..."
   find "$_pkg" -name '*.exe' -not -name 'Emulator.exe' -delete
   find "$_pkg" -name '*.dll' -delete
@@ -493,13 +536,13 @@ PYEOF
   find "$_pkg" -name '*.jnilib' -delete
   find "$_pkg" -name '*.bat' -delete
   find "$_pkg" -name '*.ps1' -delete
-  # The Mac DMG ships a Mach-O python under plugins/harmony/lib/python
+  # The Mac DMG ships a Mach-O python under plugins/app-analyzer/lib/python
   # (appanalyzer uses it for venv/pip). It cannot run on Linux. Replace it
   # with a real Linux Python 3.12.10 (python-build-standalone): Huawei's
   # appanalyzer only ships requirements resources for 3.11/3.12, and its
   # venv dir name falls back to a hardcoded 3.12.10, so the version must
   # match exactly or the requirements path lookup misses.
-  _pybase="$_pkg/plugins/harmony/lib/python"
+  _pybase="$_pkg/plugins/app-analyzer/lib/python"
   rm -rf "$_pybase/bin" "$_pybase/include" "$_pybase/lib" "$_pybase/share"
   cp -a "$srcdir/python/bin" "$_pybase/bin"
   cp -a "$srcdir/python/lib" "$_pybase/lib"
@@ -523,7 +566,7 @@ for arg in "$@"; do
     *) args+=("$arg") ;;
   esac
 done
-exec -a "$0" /opt/devecostudio/plugins/harmony/lib/python/bin/python3.12 "${args[@]}"
+exec -a "$0" /opt/devecostudio/plugins/app-analyzer/lib/python/bin/python3.12 "${args[@]}"
 WRAPEOF
   chmod +x "$_pybase/bin/python3"
   # codelinter (and the IDE's appanalyzer) writes logs and temp files
