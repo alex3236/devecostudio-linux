@@ -401,31 +401,48 @@ remains for older SDKs (e.g. 6.1.1 Release), switchable per project via
   components by `HosSdkVersion.equals(compileSdkVersion-derived)`; a
   mismatch yields `SDK component missing`.
 
-**The two real blockers and where their patches live:**
+**The blockers and where their patches live:**
 
 1. hvigor 26.0.0 validates the project's `compileSdkVersion` against
    `VersionConst.SUPPORT_COMPILE_VERSION` (= `"26.0.0"`) in
    `ValidateUtil.integrationVersionCheck()` (`validate-util.js`), rejecting
    anything else with `UNSUPPORTED_COMPILESDKVERSION`.
-2. The IDE's project sync (`HosIntegrationChecker.checkSameCompileSdkIfConfig`
+2. hvigor 6.26.4 (26.0.0.821) added `HmosSdkLoader.checkSdkVersionMatch`
+   (`hmos-sdk-loader.js`) which rejects any `compileSdkVersion` whose API
+   level differs from the latest support version with
+   `COMPILE_SDK_VERSION_MISMATCH` (00303313) — surfaced as "configured
+   version: 24, DevEco Studio version: 26.0.0"
+   (https://developer.huawei.com/.../ide-hvigor-errorcode-00303-1).
+3. The IDE's project sync (`HosIntegrationChecker.checkSameCompileSdkIfConfig`
    in `plugins/harmony/lib/hos-project-mgmt-*.jar`) requires every product's
    `compileSdkVersion` to equal the embedded SDK version (the max of
    `sdk-hos-core-osVersionMapperV2.properties` = `"26.0.0"`) and aborts sync
    with `SyncInterruptException` otherwise.
 
-Both checks are hardwired to the bundled SDK version, so **neither patch is
+All three checks are hardwired to the bundled SDK version, so **no patch is
 applied by default** — `bin/install-extra-sdk.sh` applies them when it
 installs an older SDK:
 
-- hvigor: Python string replacement turning the `printErrorExit` into
-  `||void 0` (pattern `...isEqualApiVersion)(r,s)&&...||void 0`);
+- hvigor (`validate-util.js`): Python string replacement turning the
+  `printErrorExit` into `||void 0`
+  (pattern `...isEqualApiVersion)(r,s)&&...||void 0`);
+- hvigor (`hmos-sdk-loader.js`): same trick on
+  `o.fullVersion!==e&&_log.printErrorExit(...)` → `o.fullVersion!==e||void 0`;
 - IDE jar: single-byte patch in `HosIntegrationChecker.class` — the `ifne`
   after `StringUtil.equals()` becomes `goto` (byte sequence
   `b8 00 ad 9a 00 0b` → `b8 00 ad a7 00 0b`, verified identical in
   26.0.0.621 and 26.0.0.821), so the error notification is never reached.
 
-Both patches are idempotent. Backup of the pristine hvigor file:
+All patches are idempotent. Backup of the pristine hvigor file:
 `hvigor-patch-backup/validate-util.js.orig-26.0.0` in the repo root.
+
+The extra SDK is extracted with **bsdtar/unzip, not 7z**: 7z refuses the
+SDK's symlink chains (`libunwind.so → libunwind.so.1`, `clang →
+bisheng-clang`, `clang-cl → clang`, node's `bin/npm → ../lib/...`) as
+"Dangerous link via another link was ignored" and silently drops them,
+breaking the native toolchains (issue #10). The PKGBUILD's own DMG
+extraction still uses 7z — that path only feeds `.dmg` → `Contents` and has
+no such links.
 
 With the checks gone, hvigor scans the whole SDK root
 (`/opt/devecostudio/sdk/`) for components of any version and selects the
