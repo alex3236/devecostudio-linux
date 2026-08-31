@@ -590,11 +590,17 @@ Pitfalls learned:
 
 ### CI artifacts (GitHub Actions)
 
-The workflow runs `makepkg -sfc` (Arch package), then
+The workflow runs `makepkg -sf` (Arch package; **no `-c`** — `--clean`
+removes `pkg/`, which the packaging step needs), then
 `./build.sh --stage=pkg/devecostudio --deb --rpm` (tarball + nfpm
 deb/rpm from the same tree). nfpm is not in the Arch repos, so the
 workflow downloads the static binary from the GitHub release
 (`nfpm_2.47.0_Linux_x86_64.tar.gz`, version pinned — update deliberately).
+
+The nfpm rpm packager builds the whole cpio payload in memory and peaks
+at ~16 GB RSS (measured) — far above the runner's RAM. The workflow
+creates a swapfile sized from the free disk (up to 14 GB, `fallocate` +
+`swapon`) before packaging so the rpm build does not get OOM-killed.
 
 Artifacts are uploaded **separately** (not one giant bundle) so users
 only download what they need; each is ~3–4 GB:

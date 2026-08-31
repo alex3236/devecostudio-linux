@@ -97,7 +97,24 @@ jobs:
           # GitHub release (pinned version; update deliberately).
           curl -fL https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz \
             | tar xz -C /usr/local/bin nfpm
-          nfpm --version | head -1
+          nfpm --version | grep -m1 GitVersion
+          # The rpm packager peaks at ~16 GB RSS (it builds the whole cpio
+          # payload in memory); the runner RAM alone is not enough, so add
+          # swap. Size it from the free disk (leave 2 GB headroom).
+          free -h
+          avail=$(df -B1G / | awk 'NR==2{print $4}')
+          size=$(( avail - 2 ))
+          if (( size < 4 )); then
+            echo "Not enough disk for swap ($avail GB free); rpm may fail"
+          else
+            [[ $size -gt 14 ]] && size=14
+            echo "Creating ${size}G swap..."
+            fallocate -l "${size}G" /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=$((size*1024))
+            chmod 600 /swapfile
+            mkswap /swapfile >/dev/null
+            swapon /swapfile
+            free -h
+          fi
           if [[ -d pkg/devecostudio ]]; then
             # --stage packages the existing makepkg tree: it always emits
             # the distro-agnostic tarball, and --deb/--rpm add the nfpm

@@ -56,7 +56,7 @@ for a in "$@"; do
 done
 
 _msg()   { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-error()  { printf '\033[1;31m错误:\033[0m %s\n' "$*" >&2; exit 1; }
+error()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 # makepkg macros the PKGBUILD uses; stubbed here for standalone runs
 msg2()   { _msg "$*"; }
 warning(){ printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -72,6 +72,7 @@ if [[ -n "$stage_dir" ]]; then
   [[ -d "$pkgdir/opt/devecostudio" ]] || error "stage dir has no opt/devecostudio: $pkgdir"
   # shellcheck source=PKGBUILD
   source PKGBUILD
+  _msg "Staging tree ready: $pkgdir"
 else
   mkdir -p build/src build/downloads
   # devecostudio.desktop is a local source file; makepkg copies it into
@@ -150,6 +151,7 @@ fi
 
 # ── 3. Distro-agnostic tarball (always produced) ──
 mkdir -p "$outdir"
+_msg "Building tarball..."
 chmod -R u+rw "$pkgdir/opt/devecostudio"
 cp "$pkgdir/usr/share/applications/devecostudio.desktop" "$pkgdir/opt/"
 tar -C "$pkgdir/opt" -I "gzip -1" -cf "$outdir/devecostudio-${pkgver}-linux-x86_64.tar.gz" \
