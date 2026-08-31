@@ -3,7 +3,7 @@
 [`English`](README.md) | **中文**
 
 <p align="center">
-  <img src=".github/images/screenshot.png" alt="screenshot" width="80%" />
+  <img src=".github/images/poster.png" alt="poster" width="80%" />
 </p>
 
 感谢 [Cris.Q](https://crisq.top/blog/deveco_linux_porting_notes) 的移植笔记，本项目受其启发。
@@ -84,6 +84,8 @@
     
     # 例：构建 tarball 和 rpm 包
     ./build.sh --rpm
+
+注意：`build.sh` 并**不会**校验两个华为 zip。IDEA 和 CPython 则会按 PKGBUILD 的 `sha256sums` 校验。
 
 </ul>
 </details>

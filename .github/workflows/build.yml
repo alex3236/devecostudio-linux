@@ -88,24 +88,7 @@ jobs:
             makepkg -sfc --noconfirm
           '
 
-      - name: Create tarball for other distributions
-        working-directory: devecostudio
-        run: |
-          if [[ -d pkg/opt/devecostudio ]]; then
-            # pkg/opt/devecostudio is the complete /opt/devecostudio tree;
-            # ship it as a distro-agnostic tarball so non-Arch users can
-            # extract it to /opt without a package manager. The .desktop
-            # file is included at the tarball root.
-            chmod -R u+rw pkg/opt/devecostudio
-            cp pkg/usr/share/applications/devecostudio.desktop pkg/opt/
-            ver=$(grep '^pkgver=' PKGBUILD | cut -d= -f2)
-            tar -C pkg/opt -I "gzip -1" -cf "devecostudio-${ver}-linux-x86_64.tar.gz" devecostudio devecostudio.desktop
-            echo "Created devecostudio-${ver}-linux-x86_64.tar.gz"
-          else
-            echo "pkg/opt/devecostudio not found; skipping tarball"
-          fi
-
-      - name: Build .deb and .rpm with nfpm
+      - name: Build .deb, .rpm and tarball with build.sh
         working-directory: devecostudio
         run: |
           # nfpm is not in the Arch repos; fetch the static binary from the
@@ -114,9 +97,12 @@ jobs:
             | tar xz -C /usr/local/bin nfpm
           nfpm --version | head -1
           if [[ -d pkg/devecostudio ]]; then
+            # --stage packages the existing makepkg tree: it always emits
+            # the distro-agnostic tarball, and --deb/--rpm add the nfpm
+            # packages — no duplicate tar step needed.
             ./build.sh --stage=pkg/devecostudio --deb --rpm
           else
-            echo "pkg/devecostudio not found; skipping deb/rpm"
+            echo "pkg/devecostudio not found; skipping packages"
           fi
 
       - name: Upload Arch package

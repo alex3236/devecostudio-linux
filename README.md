@@ -3,7 +3,7 @@
 **English** | [`中文`](README_CN.md)
 
 <p align="center">
-  <img src=".github/images/screenshot.png" alt="screenshot" width="80%" />
+  <img src=".github/images/poster.png" alt="poster" width="80%" />
 </p>
 
 Thanks to [Cris.Q](https://crisq.top/blog/deveco_linux_porting_notes) for the original porting notes that inspired this project.
@@ -84,6 +84,10 @@ Then:
 
     # Example: build the tarball and an rpm package
     ./build.sh --rpm
+
+Note: `build.sh` does **not** verify the two Huawei zips, 
+while IDEA and CPython are downloaded with checksum
+verification from the PKGBUILD's `sha256sums`.
 
 </ul>
 </details>
