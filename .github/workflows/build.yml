@@ -96,7 +96,7 @@ jobs:
             echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
             chown -R builder:builder /work
             runuser -u builder -- bash -c "
-              cd /work
+              cd /work/devecostudio
               # no -c: makepkg --clean removes pkg/, which the packaging
               # step below needs (build.sh --stage reads the staging tree)
               makepkg -sf --noconfirm
@@ -106,11 +106,12 @@ jobs:
             curl -fL https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz \
               | tar xz -C /usr/local/bin nfpm
             nfpm --version | grep -m1 GitVersion
-            if [[ -d /work/pkg/devecostudio ]]; then
+            cd /work/devecostudio
+            if [[ -d pkg/devecostudio ]]; then
               # --stage packages the existing makepkg tree: it always emits
               # the distro-agnostic tarball, and --deb/--rpm add the nfpm
               # packages — no duplicate tar step needed.
-              /work/build.sh --stage=pkg/devecostudio --deb --rpm
+              ./build.sh --stage=pkg/devecostudio --deb --rpm
             else
               echo "pkg/devecostudio not found; skipping packages"
             fi
