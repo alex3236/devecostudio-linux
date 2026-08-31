@@ -26,8 +26,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    container:
-      image: archlinux:base-devel
+    # No `container:` block: the non-privileged container cannot swapon
+    # (rpm packaging peaks at ~16 GB RSS), and the runner's own swap is
+    # only 3 GB. Instead run on the host, add swap with sudo, and do the
+    # actual build inside `docker run archlinux:base-devel` — the
+    # container inherits the host's memory + swap.
 
     steps:
       - name: Checkout repository
@@ -35,20 +38,16 @@ jobs:
         with:
           path: devecostudio
 
-      - name: Install dependencies
+      - name: Add swap on the host (rpm packaging needs ~16 GB RSS)
         run: |
-          pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm \
-            git \
-            jq \
-            p7zip \
-            sudo
-
-      - name: Create build user
-        run: |
-          useradd -m builder
-          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          chown -R builder:builder devecostudio
+          # host job: the runner user has passwordless sudo; a real swapfile
+          # on the host is inherited by the build container below.
+          sudo rm -f /ci.swap
+          sudo fallocate -l 14G /ci.swap
+          sudo chmod 600 /ci.swap
+          sudo mkswap /ci.swap >/dev/null
+          sudo swapon /ci.swap
+          free -h
 
       - name: Apply version and checksum overrides
         working-directory: devecostudio
@@ -81,48 +80,41 @@ jobs:
 
           wait
 
-      - name: Build package
+      - name: Build and package inside archlinux container
         run: |
-          runuser -u builder -- bash -c '
-            cd devecostudio
-            # no -c: makepkg --clean removes pkg/, which the packaging step
-            # below needs (build.sh --stage reads the staging tree)
-            makepkg -sf --noconfirm
-          '
-
-      - name: Build .deb, .rpm and tarball with build.sh
-        working-directory: devecostudio
-        run: |
-          # nfpm is not in the Arch repos; fetch the static binary from the
-          # GitHub release (pinned version; update deliberately).
-          curl -fL https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz \
-            | tar xz -C /usr/local/bin nfpm
-          nfpm --version | grep -m1 GitVersion
-          # The rpm packager peaks at ~16 GB RSS (it builds the whole cpio
-          # payload in memory); the runner RAM alone is not enough, so add
-          # swap. Size it from the free disk (leave 2 GB headroom).
-          free -h
-          avail=$(df -B1G / | awk 'NR==2{print $4}')
-          size=$(( avail - 2 ))
-          if (( size < 4 )); then
-            echo "Not enough disk for swap ($avail GB free); rpm may fail"
-          else
-            [[ $size -gt 14 ]] && size=14
-            echo "Creating ${size}G swap..."
-            fallocate -l "${size}G" /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=$((size*1024))
-            chmod 600 /swapfile
-            mkswap /swapfile >/dev/null
-            swapon /swapfile
+          # Everything in this step runs as root inside the container; the
+          # container inherits the host's memory + swap (added above).
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE":/work -w /work \
+            archlinux:base-devel bash -c '
+            set -e
+            echo "=== free -h (inside container) ==="
             free -h
-          fi
-          if [[ -d pkg/devecostudio ]]; then
-            # --stage packages the existing makepkg tree: it always emits
-            # the distro-agnostic tarball, and --deb/--rpm add the nfpm
-            # packages — no duplicate tar step needed.
-            ./build.sh --stage=pkg/devecostudio --deb --rpm
-          else
-            echo "pkg/devecostudio not found; skipping packages"
-          fi
+            pacman -Syu --noconfirm
+            pacman -S --needed --noconfirm git jq p7zip sudo
+            useradd -m builder
+            echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+            chown -R builder:builder /work
+            runuser -u builder -- bash -c "
+              cd /work
+              # no -c: makepkg --clean removes pkg/, which the packaging
+              # step below needs (build.sh --stage reads the staging tree)
+              makepkg -sf --noconfirm
+            "
+            # nfpm is not in the Arch repos; fetch the static binary from
+            # the GitHub release (pinned version; update deliberately).
+            curl -fL https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz \
+              | tar xz -C /usr/local/bin nfpm
+            nfpm --version | grep -m1 GitVersion
+            if [[ -d /work/pkg/devecostudio ]]; then
+              # --stage packages the existing makepkg tree: it always emits
+              # the distro-agnostic tarball, and --deb/--rpm add the nfpm
+              # packages — no duplicate tar step needed.
+              /work/build.sh --stage=pkg/devecostudio --deb --rpm
+            else
+              echo "pkg/devecostudio not found; skipping packages"
+            fi
+          '
 
       - name: Upload Arch package
         uses: actions/upload-artifact@v4

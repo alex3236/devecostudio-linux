@@ -590,17 +590,23 @@ Pitfalls learned:
 
 ### CI artifacts (GitHub Actions)
 
-The workflow runs `makepkg -sf` (Arch package; **no `-c`** — `--clean`
-removes `pkg/`, which the packaging step needs), then
-`./build.sh --stage=pkg/devecostudio --deb --rpm` (tarball + nfpm
-deb/rpm from the same tree). nfpm is not in the Arch repos, so the
-workflow downloads the static binary from the GitHub release
-(`nfpm_2.47.0_Linux_x86_64.tar.gz`, version pinned — update deliberately).
+The workflow does **not** use a `container:` block: GitHub's
+non-privileged containers lack `CAP_SYS_ADMIN`, so `swapon` fails with
+`Operation not permitted`, and the runner's own swap is only 3 GB — while
+the nfpm rpm packager builds the whole cpio payload in memory and peaks at
+~16 GB RSS (measured). Instead:
 
-The nfpm rpm packager builds the whole cpio payload in memory and peaks
-at ~16 GB RSS (measured) — far above the runner's RAM. The workflow
-creates a swapfile sized from the free disk (up to 14 GB, `fallocate` +
-`swapon`) before packaging so the rpm build does not get OOM-killed.
+- the job runs on the host and adds a 14 GB swapfile with sudo
+  (`/ci.swap`; `fallocate` — the kernel rejects *sparse* swap files with
+  "contains holes"); the host has 15 GB RAM, so the build has ~29 GB.
+  Verified: a `docker run` container inherits the host's swap.
+- the actual build runs inside `docker run --rm -v $GITHUB_WORKSPACE:/work
+  archlinux:base-devel`: `makepkg -sf` (**no `-c`** — `--clean` removes
+  `pkg/`, which the packaging step needs) as a non-root `builder` user,
+  then `/work/build.sh --stage=pkg/devecostudio --deb --rpm` (tarball +
+  nfpm deb/rpm from the same tree). nfpm is not in the Arch repos, so it
+  is downloaded from the GitHub release (`nfpm_2.47.0_Linux_x86_64.tar.gz`,
+  version pinned — update deliberately).
 
 Artifacts are uploaded **separately** (not one giant bundle) so users
 only download what they need; each is ~3–4 GB:
