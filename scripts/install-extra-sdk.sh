@@ -3,7 +3,10 @@
 # command-line-tools zip into /opt/devecostudio/sdk/, alongside the bundled
 # SDK. hvigor then picks the SDK by the project's compileSdkVersion — see
 # the README "Release SDK" section.
-# Usage: install-extra-sdk.sh /path/to/commandline-tools-linux-x64-<ver>.zip
+# Usage: install-extra-sdk.sh /path/to/commandline-tools-linux-<x64|arm64>-<ver>.zip
+# The zip has to be built for the same architecture as this install — the SDK
+# carries host toolchains (BiSheng clang/lld, node, hdc), which cannot run on
+# another architecture.
 set -euo pipefail
 
 IDEDIR=/opt/devecostudio
