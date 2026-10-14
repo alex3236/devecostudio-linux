@@ -463,7 +463,9 @@ PYEOF
   chmod +x "$_pybase/bin/python3"
   # codelinter (and the IDE's appanalyzer) writes logs and temp files
   # under tools/codelinter/linter/result/ — make it world-writable so
-  # running without sudo works.
+  # running without sudo works. The x64 CLI zip ships the (empty) directory,
+  # the arm64 one does not, so create it instead of assuming it.
+  mkdir -p "$_pkg/tools/codelinter/linter/result"
   chmod 777 "$_pkg/tools/codelinter/linter/result"
   # macOS code-signature xattr sidecar files ("<file>:com.apple.cs.*") ship
   # in plugins' node_modules etc.; they are useless on Linux

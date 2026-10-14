@@ -466,6 +466,11 @@ The package chmods the dir to 777; a fresh install starts empty so no stale
 files remain. (Root-owned 600 leftovers from manual sudo runs must be
 deleted locally.)
 
+The x64 CLI zip ships that (empty) directory; the arm64 zip does not, which
+broke the first aarch64 CI run at the plain `chmod` (`No such file or
+directory`, the last step of `package()`). The package now `mkdir -p`s it
+first — same result on x64, and the world-writable dir exists on aarch64 too.
+
 ### `ohos-trace` plugin removal
 
 `plugins/ohos-trace` is deleted; it carries the "lemon" plugin bug (exit hang).
