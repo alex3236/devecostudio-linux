@@ -16,6 +16,9 @@
 
 除预览器外，功能基本可用。若发现任何问题，请提交一个 Issue。
 
+`x86_64` 与 `aarch64`（ARM）都支持打包；目标架构只决定使用哪个 Command Line
+Tools zip、哪个 IDEA 归档以及哪个 CPython 构建。
+
 若原生 Linux 版发行，此项目将归档。
 
 > [!NOTE]  
@@ -31,11 +34,14 @@
 
 首先，从华为官网下载两个文件：
 
-1. **DevEco Studio ${pkgver} for Mac**
-2. **Command Line Tools for Linux (x86_64) ${pkgver}**
+1. **DevEco Studio ${pkgver} for Mac** — x64 或 ARM 版均可；只取其跨平台文件，
+   两个 Mac 构建都能用。
+2. **Command Line Tools for Linux ${pkgver}** — 选择与目标架构匹配的版本：
+   `x86_64` → *Linux (x64)*，`aarch64` → *Linux (ARM64)*。
 
-将两个 `.zip` 放在 PKGBUILD 旁边，并**重命名**为 `devecostudio-mac.zip` 和
-`commandline-tools-linux-x64.zip`。
+将两个 `.zip` 放在 PKGBUILD 旁边。`makepkg` 需要**重命名**为
+`devecostudio-mac.zip` 与 `commandline-tools-linux-x64.zip` /
+`commandline-tools-linux-arm64.zip`；`build.sh` 也接受华为原始的带版本号文件名。
 
     # 克隆仓库
     git clone https://github.com/alex3236/devecostudio-linux.git
@@ -53,6 +59,8 @@
 
     makepkg -si
 
+源文件按宿主架构选择：在 Arch Linux ARM 上这条命令构建 aarch64 包，在其他机器上构建 x86_64 包。
+
 如果出现校验和不符，说明华为更新了 IDE，你需要自行测试此项目是否仍然可用。
 
 要更新校验和以匹配你的本地文件：
@@ -68,7 +76,7 @@
 
 你将需要以下依赖：
 
-    bsdtar 或 unzip, jq, python3, curl, binutils
+    bsdtar 或 unzip, 7z, jq, python3, curl, binutils
 
 如你需要构建 .deb/.rpm，则额外需要：
 
@@ -84,6 +92,9 @@
     
     # 例：构建 tarball 和 rpm 包
     ./build.sh --rpm
+
+目标架构默认取宿主架构；在 aarch64 机器上 `./build.sh --arch=aarch64` 与默认行为一致。
+**跨架构**构建会被拒绝：JBR、启动器、node、模拟器与 SDK 的宿主工具链全部来自目标架构的归档。
 
 注意：`build.sh` 并**不会**校验两个华为 zip。IDEA 和 CPython 则会按 PKGBUILD 的 `sha256sums` 校验。
 
@@ -103,17 +114,20 @@
 1. **Fork** 此仓库。
 2. 打开 **Actions** 标签页，选择 **Build DevEco Studio PKGBUILD** 并点击 **Run workflow**。
 3. 可选："Use workflow from" 选择某个已发布的 tag。
-4. 填写两个下载 URL：
+4. 选择 **`target_arch`**（`x86_64` 或 `aarch64`），并填写两个下载 URL：
    - `mac_zip_url` — Mac zip 的 URL
-   - `cli_zip_url` — Linux Command Line Tools zip 的 URL
+   - `cli_zip_url` — 与所选架构对应的 Linux Command Line Tools zip 的 URL
 5. 可选地覆盖版本号和校验值（留空则使用 `PKGBUILD` 中的值）：
    - `pkgver` — 例如 `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — 两个 zip 的 SHA256；未测试过的版本可用 `SKIP` 跳过校验
 6. 运行结束后，从运行页面下载对应平台的 artifact：
-   - `devecostudio-arch` — Arch 包
-   - `devecostudio-deb` — Debian/Ubuntu 包
-   - `devecostudio-rpm` — Fedora/RHEL 包
-   - `devecostudio-tarball` — 任何其他发行版
+   - `devecostudio-arch-x86_64` — Arch 包
+   - `devecostudio-deb-<arch>` — Debian/Ubuntu 包
+   - `devecostudio-rpm-<arch>` — Fedora/RHEL 包
+   - `devecostudio-tarball-<arch>` — 任何其他发行版
+
+每次运行只构建一个架构。`aarch64` 跑在 GitHub 的 ARM runner 上，那里没有
+makepkg，因此不产出 Arch 包——在 Arch Linux ARM 上请用 `makepkg -si` 本地构建。
 
 GitHub 账户在公共仓库上可以免费使用 Actions。
 
@@ -141,7 +155,7 @@ tarball 适用于任何 Linux。
 
 解压 tarball 并手动设置启动器：
 
-    sudo tar -xzf devecostudio-<版本>-linux-x86_64.tar.gz -C /opt
+    sudo tar -xzf devecostudio-<版本>-linux-<架构>.tar.gz -C /opt
     sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
     sudo desktop-file-install /opt/devecostudio.desktop
 
@@ -188,11 +202,13 @@ IDE 运行需要捆绑的华为命令行工具，它们也可以独立在终端�
 <summary><b>怎么做？</b></summary>
 <br><table><thead><tr><td>
 
-1. 下载相应的 CLI 工具包；
+1. 下载相应的 CLI 工具包，选择与目标架构匹配的版本（SDK 内含 BiSheng clang
+   等宿主工具链）；
 2. 通过以下命令安装 SDK 至 IDE 目录：
     ```shell
     # 从华为 CLI zip 安装 SDK（需要 sudo）
     sudo /opt/devecostudio/bin/install-extra-sdk.sh /commandline-tools-linux-x64-6.1.1.280.zip
+    # aarch64 上则用 commandline-tools-linux-arm64-<ver>.zip
     ```
 
 3. 在你的项目中设置编译 SDK：

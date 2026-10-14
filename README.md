@@ -16,6 +16,9 @@ It is not an official package. It is not endorsed by Huawei or JetBrains.
 
 Everything works except the previewer. If you find any problems, file an issue.
 
+Both `x86_64` and `aarch64` (ARM) are packaged; the target architecture only
+picks which Command Line Tools zip, IDEA archive and CPython build are used.
+
 If Huawei ships a native Linux build, this project will be archived.
 
 > [!NOTE]  
@@ -31,11 +34,15 @@ Always check `PKGBUILD` yourself before using.
 
 First, download two files from Huawei's website:
 
-1. **DevEco Studio ${pkgver} for Mac**
-2. **Command Line Tools for Linux (x86_64) ${pkgver}**
+1. **DevEco Studio ${pkgver} for Mac** — either the x64 or the ARM build; only
+   platform-independent files are taken from it, so either one works.
+2. **Command Line Tools for Linux ${pkgver}**, in the build matching your
+   architecture: `x86_64` → *Linux (x64)*, `aarch64` → *Linux (ARM64)*.
 
-Place both `.zip` files next to the PKGBUILD, **renamed** to `devecostudio-mac.zip` and
-`commandline-tools-linux-x64.zip`.
+Place both `.zip` files next to the PKGBUILD. `makepkg` needs them **renamed**
+to `devecostudio-mac.zip` and `commandline-tools-linux-x64.zip` /
+`commandline-tools-linux-arm64.zip`; `build.sh` also accepts Huawei's original
+versioned filenames.
 
     # Clone the repo
     git clone https://github.com/alex3236/devecostudio-linux.git
@@ -53,6 +60,9 @@ What to do next depends on your distro:
 
     makepkg -si
 
+The host architecture picks the sources, so this builds the aarch64 package on
+Arch Linux ARM and the x86_64 package everywhere else.
+
 If you find checksum errors, it means Huawei has updated the IDE, and you will need to test for yourself whether this project still works.
 
 To update checksums to match your local files:
@@ -68,7 +78,7 @@ To update checksums to match your local files:
 
 You will need these dependencies:
 
-    bsdtar or unzip, jq, python3, curl, binutils
+    bsdtar or unzip, 7z, jq, python3, curl, binutils
 
 To also build .deb/.rpm packages:
 
@@ -84,6 +94,11 @@ Then:
 
     # Example: build the tarball and an rpm package
     ./build.sh --rpm
+
+The target defaults to the host architecture; `--arch=aarch64` on an aarch64
+machine is the same build. Building for the *other* architecture is refused:
+the JBR, the launcher, node, the Emulator and the SDK host toolchains all come
+from target-arch archives.
 
 Note: `build.sh` does **not** verify the two Huawei zips, 
 while IDEA and CPython are downloaded with checksum
@@ -105,17 +120,21 @@ The same build can be run in GitHub Actions:
 1. **Fork** this repository.
 2. Open the **Actions** tab, select **Build DevEco Studio PKGBUILD** and click **Run workflow**.
 3. Optionally, "Use workflow from" a tagged release.
-4. Fill in the two download URLs:
+4. Pick **`target_arch`** (`x86_64` or `aarch64`) and fill in the two download URLs:
    - `mac_zip_url` — URL of the Mac zip
-   - `cli_zip_url` — URL of the Linux Command Line Tools zip
+   - `cli_zip_url` — URL of the Linux Command Line Tools zip *matching that architecture*
 5. Optionally override the version and checksums (leave empty to keep the values in `PKGBUILD`):
    - `pkgver` — e.g. `6.1.1.280`
    - `mac_zip_sha256` / `cli_zip_sha256` — SHA256 of the two zips; use `SKIP` to skip verification for an untested version
 6. When the run finishes, download the artifact matching your platform:
-   - `devecostudio-arch` — Arch package
-   - `devecostudio-deb` — Debian/Ubuntu package
-   - `devecostudio-rpm` — Fedora/RHEL package
-   - `devecostudio-tarball` — for any other distro
+   - `devecostudio-arch-x86_64` — Arch package
+   - `devecostudio-deb-<arch>` — Debian/Ubuntu package
+   - `devecostudio-rpm-<arch>` — Fedora/RHEL package
+   - `devecostudio-tarball-<arch>` — for any other distro
+
+Each run builds one architecture. `aarch64` runs on GitHub's ARM runner, where
+makepkg is not available, so no Arch package is produced — on Arch Linux ARM,
+build locally with `makepkg -si`.
 
 A GitHub account can use Actions for free on public repositories.
 
@@ -143,7 +162,7 @@ works on any Linux.
 
 Extract the tarball and set up the launcher manually:
 
-    sudo tar -xzf devecostudio-<ver>-linux-x86_64.tar.gz -C /opt
+    sudo tar -xzf devecostudio-<ver>-linux-<arch>.tar.gz -C /opt
     sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
     sudo desktop-file-install /opt/devecostudio.desktop
 
@@ -197,11 +216,13 @@ reproducing issues or building against an older API level.
 <summary><b>How?</b></summary>
 <br><table><thead><tr><td>
 
-1. Download the corresponding CLI tools package;
+1. Download the corresponding CLI tools package, in the build matching your
+   architecture (the SDK carries host toolchains such as BiSheng clang);
 2. Install the SDK into the IDE directory with the following command:
     ```shell
     # Install SDK from a Huawei CLI zip (needs sudo)
     sudo /opt/devecostudio/bin/install-extra-sdk.sh /commandline-tools-linux-x64-6.1.1.280.zip
+    # on aarch64: commandline-tools-linux-arm64-<ver>.zip
     ```
 
 3. Set the compile SDK in your project:

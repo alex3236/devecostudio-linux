@@ -4,20 +4,77 @@
 # === Manual downloads (place in same directory as PKGBUILD) ===
 # Both files must be renamed to the fixed names below (the filenames are
 # version-independent, so only pkgver and the checksums change on upgrade).
+# build.sh also accepts Huawei's original versioned filenames (e.g.
+# commandline-tools-linux-arm64-26.0.0.851.zip); makepkg needs the rename.
 # If you use a different version, update pkgver and the SHA256 checksums
 # (or set them to "SKIP" to skip verification).
 #
 # 1. devecostudio-mac.zip — Mac (X86 or ARM, either works)
 #    Download from: https://developer.huawei.com/consumer/cn/deveco-studio/
+#    Only platform-independent files are taken from it, so either Mac build
+#    works for either target architecture. The pinned checksum is the build
+#    tested for that architecture (x86_64 → Mac x64, aarch64 → Mac ARM);
+#    using the other one needs updpkgsums or SKIP.
 #
-# 2. commandline-tools-linux-x64.zip — Command Line Tools for Linux
+# 2. Command Line Tools for Linux, matching the target architecture:
+#      x86_64  → commandline-tools-linux-x64.zip
+#      aarch64 → commandline-tools-linux-arm64.zip
 #    Download from same page
 
 pkgname=devecostudio
 pkgdesc='Huawei DevEco Studio repackaged for Arch Linux'
 pkgver=26.0.0.851
 _ideaver=2026.1.3
-pkgrel=2
+_cpythonver=3.12.10
+_cpythonrel=20250409
+pkgrel=3
+# ── Target architecture ──
+# makepkg sets CARCH; build.sh exports it (defaults to the host, --arch to
+# override). Every native component comes from the target-arch archive (IDEA
+# JBR, launcher and native libs, node, Emulator, SDK host toolchains), so the
+# build host has to match — this is not a cross build.
+CARCH=${CARCH:-$(uname -m)}
+case "$CARCH" in
+  x86_64)
+    _cliarch=x64
+    _idea_file=idea-${_ideaver}.tar.gz
+    _native_dir=linux-x86_64     # IDEA lib/native/<dir>
+    _jna_dir=amd64               # IDEA lib/jna/<dir>/libjnidispatch.so
+    _pinfo_arch=amd64            # product-info.json launch[].arch
+    _deb_arch=amd64
+    _rpm_arch=x86_64
+    _py_triple=x86_64-unknown-linux-gnu
+    _sha_mac=ad7f7100b3d95bacfa1b803ad1026c1e3b0f23cbb61c868f5684fbaa5b3772d8
+    _sha_cli=ab604bd92721d5cbcafd154e6461d46b9f1b105e7b89eab04a9d046681198082
+    _sha_idea=a6f049716da1d09d9e0ec1500c60bf01a5ff8a0fe2419178dd1ff2fdb2b77563
+    _sha_python=e9cf6f7da499a4400ba30ae1da8f7ef25ce97827bd8c1084717aa05438035186
+    ;;
+  aarch64)
+    _cliarch=arm64
+    _idea_file=idea-${_ideaver}-aarch64.tar.gz
+    _native_dir=linux-aarch64
+    _jna_dir=aarch64
+    _pinfo_arch=aarch64
+    _deb_arch=arm64
+    _rpm_arch=aarch64
+    _py_triple=aarch64-unknown-linux-gnu
+    _sha_mac=86289edeb2e8e30eb1adf80cba0fc55f0e57cdd4f6dc4ec9c59985a0bc4b8524
+    _sha_cli=c36fdba852ce02354ffcc1ad5f3ab4bdeac917403fe9bbbd60c499a4416246a0
+    _sha_idea=7659e791609233c3e6bf67c1bfcc86f5fa1176477ca5815ae6125b0eae84a88b
+    _sha_python=91557c4bc1f65c65c2bf1d0fc7a2816d21b1128f11d2d421af7bd5f6ce07232a
+    ;;
+  *)
+    error "unsupported CARCH: $CARCH (x86_64 or aarch64)"
+    exit 1
+    ;;
+esac
+# CI overrides the two user-supplied zip checksums through the environment
+# (workflow inputs mac_zip_sha256 / cli_zip_sha256) instead of sed-ing this file
+_sha_mac=${MAC_ZIP_SHA256:-$_sha_mac}
+_sha_cli=${CLI_ZIP_SHA256:-$_sha_cli}
+_idea_url=https://download.jetbrains.com/idea/$_idea_file
+_py_file=cpython-${_cpythonver}+${_cpythonrel}-${_py_triple}-install_only.tar.gz
+_py_url=https://github.com/astral-sh/python-build-standalone/releases/download/${_cpythonrel}/${_py_file}
 # ── CLI tool exposure ──
 # The bundled Huawei CLI tools (hvigorw, ohpm, hstack, codelinter, Emulator)
 # live under /opt/devecostudio/tools/bin/. Set _expose_cli_tools=false to
@@ -40,7 +97,7 @@ _shared_scripts=(
 # Re-applies the extra-SDK patches after an install/upgrade (an upgrade
 # restores the pristine hvigor/IDE files); a no-op without an extra SDK.
 install=devecostudio.install
-arch=('x86_64')
+arch=('x86_64' 'aarch64')
 url='https://developer.huawei.com/consumer/cn/deveco-studio/'
 license=('custom:Commercial')
 depends=(
@@ -59,17 +116,19 @@ makedepends=('jq' 'p7zip' 'python')
 options=('!strip')
 source=(
   "devecostudio-mac.zip"
-  "commandline-tools-linux-x64.zip"
-  "idea-${_ideaver}.tar.gz::https://download.jetbrains.com/idea/idea-${_ideaver}.tar.gz"
+  "commandline-tools-linux-${_cliarch}.zip"
+  "${_idea_file}::${_idea_url}"
   "devecostudio.desktop"
-  "cpython-3.12.10+20250409-x86_64-unknown-linux-gnu-install_only.tar.gz::https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10+20250409-x86_64-unknown-linux-gnu-install_only.tar.gz"
+  "${_py_file}::${_py_url}"
 )
+# Positions match the source array (build.sh reads _sha_idea/_sha_python by
+# name, the CI override only ever touches the two Huawei zips)
 sha256sums=(
-  'ad7f7100b3d95bacfa1b803ad1026c1e3b0f23cbb61c868f5684fbaa5b3772d8'
-  'ab604bd92721d5cbcafd154e6461d46b9f1b105e7b89eab04a9d046681198082'
-  'a6f049716da1d09d9e0ec1500c60bf01a5ff8a0fe2419178dd1ff2fdb2b77563'
+  "$_sha_mac"
+  "$_sha_cli"
+  "$_sha_idea"
   'b530705424c7fdd61c3eaa477d6c79643e5d9d0cf7ecadc8f6e96559b7c6dc2d'
-  'e9cf6f7da499a4400ba30ae1da8f7ef25ce97827bd8c1084717aa05438035186'
+  "$_sha_python"
 )
 
 prepare() {
@@ -241,12 +300,14 @@ package() {
   # fsnotifier
   cp -a "$_idea/bin/fsnotifier" "$_pkg/bin/"
 
-  # native libs
+  # native libs (per-architecture directories inside the IDEA tarball;
+  # lib/pty4j/linux and lib/skiko-awt-runtime-all are arch-neutral names and
+  # carry the matching arch subdir/file for the tarball we downloaded)
   rm -rf "$_pkg/lib/native" "$_pkg/lib/pty4j" "$_pkg/lib/jna" "$_pkg/lib/skiko-awt-runtime-all"
-  mkdir -p "$_pkg/lib/native/linux-x86_64" "$_pkg/lib/pty4j/linux" "$_pkg/lib/jna/amd64" "$_pkg/lib/skiko-awt-runtime-all"
-  cp -a "$_idea/lib/native/linux-x86_64/"* "$_pkg/lib/native/linux-x86_64/"
+  mkdir -p "$_pkg/lib/native/$_native_dir" "$_pkg/lib/pty4j/linux" "$_pkg/lib/jna/$_jna_dir" "$_pkg/lib/skiko-awt-runtime-all"
+  cp -a "$_idea/lib/native/$_native_dir/"* "$_pkg/lib/native/$_native_dir/"
   cp -a "$_idea/lib/pty4j/linux/"* "$_pkg/lib/pty4j/linux/"
-  cp -a "$_idea/lib/jna/amd64/libjnidispatch.so" "$_pkg/lib/jna/amd64/"
+  cp -a "$_idea/lib/jna/$_jna_dir/libjnidispatch.so" "$_pkg/lib/jna/$_jna_dir/"
   cp -a "$_idea/lib/skiko-awt-runtime-all/"* "$_pkg/lib/skiko-awt-runtime-all/"
 
   msg2 "Replacing platform-specific components from CLI tools (SDK, wrappers)..."
@@ -308,7 +369,7 @@ package() {
   # ── product-info.json (extracted from Mac DMG, transformed for Linux via jq) ──
   jq \
     --arg os "Linux" \
-    --arg arch "amd64" \
+    --arg arch "$_pinfo_arch" \
     --arg launcher "bin/devecostudio" \
     --arg java "jbr/bin/java" \
     --arg vmopts "bin/devecostudio64-lin.vmoptions" \
@@ -338,7 +399,8 @@ package() {
     "$_mac/Resources/product-info.json" > "$_pkg/product-info.json"
 
   msg2 "Stripping Linux binaries..."
-  # Strip JBR, launcher, native .so; skip cross-compiled ARM SDK binaries
+  # Strip JBR, launcher, native .so; the SDK is left alone (its host
+  # toolchains ship with debug info, and it carries other-arch binaries)
   find "$_pkg/jbr" -type f -executable -exec strip --strip-all {} \; 2>/dev/null || true
   strip --strip-all "$_pkg/bin/devecostudio" 2>/dev/null || true
   find "$_pkg/lib" -name '*.so' -exec strip --strip-unneeded {} \; 2>/dev/null || true
@@ -401,7 +463,9 @@ PYEOF
   chmod +x "$_pybase/bin/python3"
   # codelinter (and the IDE's appanalyzer) writes logs and temp files
   # under tools/codelinter/linter/result/ — make it world-writable so
-  # running without sudo works.
+  # running without sudo works. The x64 CLI zip ships the (empty) directory,
+  # the arm64 one does not, so create it instead of assuming it.
+  mkdir -p "$_pkg/tools/codelinter/linter/result"
   chmod 777 "$_pkg/tools/codelinter/linter/result"
   # macOS code-signature xattr sidecar files ("<file>:com.apple.cs.*") ship
   # in plugins' node_modules etc.; they are useless on Linux

@@ -1,5 +1,7 @@
 name: devecostudio
-arch: amd64
+# Rendered by build.sh with envsubst: PKG_ARCH is the per-format spelling
+# (deb: amd64/arm64, rpm: x86_64/aarch64) and STAGE the staging tree root.
+arch: "${PKG_ARCH}"
 platform: linux
 version: "${PKGVER}"
 release: "${PKGREL}"
@@ -39,10 +41,10 @@ overrides:
       - fcitx5
 
 contents:
-  - src: pkg/devecostudio/opt/devecostudio
+  - src: ${STAGE}/opt/devecostudio
     dst: /opt/devecostudio
     type: tree
-  - src: pkg/devecostudio/usr/share/applications/devecostudio.desktop
+  - src: ${STAGE}/usr/share/applications/devecostudio.desktop
     dst: /usr/share/applications/devecostudio.desktop
   # /usr/bin -> /opt/devecostudio symlinks (as installed by the Arch package)
   - dst: /usr/bin/devecostudio

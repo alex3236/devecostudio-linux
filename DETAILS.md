@@ -10,8 +10,8 @@ view; this is the developer-facing view.
 | Source | What it provides | Why |
 |---|---|---|
 | **Mac DMG** (`devecostudio-mac.zip`) | `lib/*.jar`, `plugins/`, `modules/`, `license/`, `build.txt`, `bin/devecostudio.svg`, `bin/idea.properties`, `bin/devecostudio.vmoptions`, `Resources/product-info.json`, `tools/UxTestService` | Huawei ships DevEco Studio for Windows, macOS, and Linux. The Windows installer is an `.exe` that is painful to extract and lags in version; the Mac DMG extracts trivially with `7z x` and all of these files are platform-independent (Java bytecode, resources, templates). |
-| **JetBrains IDEA tarball** (`idea-${_ideaver}.tar.gz`) | `jbr/`, `bin/idea` launcher, `bin/fsnotifier`, `lib/native/linux-x86_64/`, `lib/pty4j/linux/`, `lib/jna/amd64/`, `lib/skiko-awt-runtime-all/` | The macOS-specific bits (JBR, launcher, native `.so`s) are replaced with Linux ones. DevEco's build number is pinned to a specific IDEA baseline — see "IDEA version matching" below. |
-| **Command Line Tools for Linux** (`commandline-tools-linux-x64.zip`) | `sdk/`, `tool/node/`, `hvigor/`, `ohpm/`, `hstack/`, `codelinter/`, `emulator/`, `arktsdoc/`, `bin/` wrappers | The CLI zip already contains Linux-native versions of every tool, and its SDK is the one the IDE needs. |
+| **JetBrains IDEA tarball** (`idea-${_ideaver}.tar.gz`, `idea-${_ideaver}-aarch64.tar.gz`) | `jbr/`, `bin/idea` launcher, `bin/fsnotifier`, `lib/native/<linux-arch>/`, `lib/pty4j/linux/`, `lib/jna/<arch>/`, `lib/skiko-awt-runtime-all/` | The macOS-specific bits (JBR, launcher, native `.so`s) are replaced with Linux ones. DevEco pins an IDEA baseline (`_ideaver`); JetBrains publishes that release per architecture and both archives carry the same build number (`idea-2026.1.3` and `idea-2026.1.3-aarch64` are both `IU-261.25134.95`). |
+| **Command Line Tools for Linux** (`commandline-tools-linux-x64.zip`, `commandline-tools-linux-arm64.zip`) | `sdk/`, `tool/node/`, `hvigor/`, `ohpm/`, `hstack/`, `codelinter/`, `emulator/`, `arktsdoc/`, `bin/` wrappers | The CLI zip already contains Linux-native versions of every tool, and its SDK is the one the IDE needs. |
 
 Everything from the Mac DMG that is not on the list above is either
 platform-native (and unusable on Linux) or duplicated by the CLI: `jbr`,
@@ -20,10 +20,55 @@ platform-native (and unusable on Linux) or duplicated by the CLI: `jbr`,
 (`prepare()`).
 
 The two Huawei zips are **user-supplied** (Huawei's download links are
-signed and expire), renamed to version-independent filenames
-(`devecostudio-mac.zip`, `commandline-tools-linux-x64.zip`). Only the IDEA
-tarball is auto-downloaded. Checksums live in `sha256sums`; users changing
-versions update `pkgver` + the two checksums (or use `SKIP`).
+signed and expire). `makepkg` needs them renamed to the version-independent
+names (`devecostudio-mac.zip`, `commandline-tools-linux-{x64,arm64}.zip`);
+`build.sh` also accepts Huawei's own versioned filenames. Only the IDEA and
+CPython archives are auto-downloaded. Checksums live in `sha256sums`; users
+changing versions update `pkgver` + the two checksums (or use `SKIP`).
+
+### Target architectures: x86_64 and aarch64
+
+`CARCH` (makepkg sets it; `build.sh` exports it from `--arch`, defaulting to
+`uname -m`) selects everything architecture-specific in one case block at the
+top of the PKGBUILD: the CLI zip name, the IDEA tarball name/URL, the CPython
+build triple, the IDEA `lib/native/<dir>` + `lib/jna/<dir>` sources, the
+`product-info.json` `launch[].arch` token, and the deb/rpm arch spellings. Per
+architecture four checksums are pinned (Mac zip, CLI zip, IDEA, CPython), and
+`source`/`sha256sums` keep the same positions so the two arrays stay parallel.
+
+Trap: because `sha256sums` holds variables rather than literals, `updpkgsums`
+replaces the whole array with the hashes of the files present locally — fine
+for a one-off build, but that edit drops the arch switch and must not be
+committed.
+
+This is **not** a cross build: JBR, the launcher, `fsnotifier`, node, the
+Emulator and the SDK host toolchains are target-arch binaries, so the build
+host has to match. `build.sh` refuses a mismatch (with `--stage` it only warns,
+since there the arch only renames the outputs).
+
+What was verified against the 26.0.0.851 archives (not inherited from x86_64):
+
+- The **Mac ARM DMG** (`deveco-studio-26.0.0.851-aarch64.dmg`) has the same
+  volume name and `DevEco-Studio.app/Contents` tree as the x64 one, and every
+  path `prepare()`/`package()` reads exists — including the `7z` exclusion list.
+  Its `lib/` carries `native/mac-aarch64`, `jna/aarch64`, `skiko-awt-runtime-all/
+  libskiko-macos-arm64.dylib`, all of which are dropped or replaced anyway, so
+  either Mac build works for either target.
+- The **arm64 CLI zip** has the identical `command-line-tools/` layout. Its
+  `node`, `Emulator`, `emulator-crash-service` and `hdc` are ELF `EM_AARCH64`
+  (`e_machine` `0xb7`), and `ohpm`'s `@ohos/tar_rs` ships `.node` binaries for
+  every platform including `linux-arm64-gnu`.
+- One real gap: the **arm64 CLI zip contains no Previewer binary** —
+  `sdk/default/openharmony/previewer/` holds only `NOTICE.txt` and
+  `oh-uni-package.json`, where x64 also ships `common/bin/Previewer`. The
+  previewer never worked on Linux (see above); on aarch64 `hvigorw test` now
+  fails at spawn instead of at the "Linux is not supported" line, and
+  `scripts/patch-previewer.py` (which patches *hvigor*, not the SDK) rejects
+  immediately either way.
+- The IDEA archives differ in one layout detail: `lib/pty4j/linux/` holds
+  `x86-64/` on x64 but `aarch64/` on aarch64. The PKGBUILD copies the whole
+  `lib/pty4j/linux/` tree, so it never names that subdir. `lib/native/` and
+  `lib/jna/` *are* named, because the package must not ship the other arch.
 
 ## The magic, by area
 
@@ -115,6 +160,11 @@ can be fixed by packaging. (A red herring first: the previewer also
 fails to load `libshared_libz.so` / `libhilog.so` — the CLI ships
 `libhilog_linux.so` and no zlib shim — but adding those only gets the
 engine to the point where it prints "Linux is not supported".)
+
+On aarch64 there is nothing to analyse: Huawei's arm64 CLI zip ships **no
+Previewer binary at all** (`sdk/default/openharmony/previewer/` holds only
+`NOTICE.txt` and `oh-uni-package.json`), so the same code paths fail at
+process spawn instead of inside the engine.
 
 ### `hvigorw test` hung forever (fixed in the package)
 
@@ -234,7 +284,9 @@ and transformed with `jq` at build time: OS/arch/launcher/java/vmoptions
 paths rewritten (`$APP_PACKAGE/Contents/` → `$IDE_HOME/`), macOS-only
 `--add-opens` (com.apple.*, sun.lwawt) filtered out, Linux add-opens
 (sun.awt.X11, com.sun.java.swing.plaf.gtk) and the native-access
-flag appended, `startupWmClass=deveco-studio`. The 202-entry
+flag appended, `startupWmClass=deveco-studio`. `launch[].arch` is set from
+`$_pinfo_arch` — `amd64` on x86_64, `aarch64` on aarch64, the same spelling
+the matching IDEA `product-info.json` uses. The 202-entry
 `bootClassPathJarNames` comes straight from the DMG — the jq filter never
 hardcodes it. (A stale `product-info.json` in the repo was deleted for
 this reason: it isn't read by the build.)
@@ -242,11 +294,14 @@ this reason: it isn't read by the build.)
 ### JBR and native libs
 
 JBR is wholesale replaced by the IDEA Linux JBR (`jbr/`). Native libs are
-replaced per-directory: `lib/native/linux-x86_64`, `lib/pty4j/linux`,
-`lib/jna/amd64/libjnidispatch.so`, and `lib/skiko-awt-runtime-all`
-(26.0.0 added this dir; the Mac DMG ships a `.dylib`, replaced by the
-Linux version). A mac-style `jbr/Contents/Home/bin` symlink exists because
-some Huawei plugins hardcode that path.
+replaced per-directory: `lib/native/$_native_dir` (`linux-x86_64` /
+`linux-aarch64`), `lib/pty4j/linux` (whole tree — its `x86-64`/`aarch64`
+subdirectory is never named), `lib/jna/$_jna_dir/libjnidispatch.so` (`amd64` /
+`aarch64`), and `lib/skiko-awt-runtime-all` (26.0.0 added this dir; the Mac DMG
+ships a `.dylib`, replaced by the Linux version — the archive already holds
+only the matching arch, `libskiko-linux-x64.so` vs `libskiko-linux-arm64.so`).
+A mac-style `jbr/Contents/Home/bin` symlink exists because some Huawei plugins
+hardcode that path.
 
 ### JCEF / CEF UI under Wayland
 
@@ -337,8 +392,10 @@ uses it for venv/pip:
 
 The fix replaces the whole `bin/ lib/ include/ share/` tree with a real
 Linux CPython **3.12.10** from python-build-standalone
-(astral-sh, MIT; `cpython-3.12.10+20250409-...-install_only.tar.gz` is a
-automatic source with a pinned checksum). The version must stay exactly
+(astral-sh, MIT; `cpython-3.12.10+20250409-<triple>-install_only.tar.gz`,
+where `<triple>` is `x86_64-unknown-linux-gnu` or
+`aarch64-unknown-linux-gnu` per CARCH — an automatic source with a pinned
+checksum for each). The version must stay exactly
 3.12.10: the appanalyzer jar only ships requirements resources for
 `python/3.11/` and `python/3.12/`, and `getLocalRequirements` reads
 `/python/<minor>/requirements_internal.json` — a 3.14 interpreter produced
@@ -408,6 +465,11 @@ run; with the dir at root:755 and stale root-owned 600 logs from a previous
 The package chmods the dir to 777; a fresh install starts empty so no stale
 files remain. (Root-owned 600 leftovers from manual sudo runs must be
 deleted locally.)
+
+The x64 CLI zip ships that (empty) directory; the arm64 zip does not, which
+broke the first aarch64 CI run at the plain `chmod` (`No such file or
+directory`, the last step of `package()`). The package now `mkdir -p`s it
+first — same result on x64, and the world-writable dir exists on aarch64 too.
 
 ### `ohos-trace` plugin removal
 
@@ -533,7 +595,10 @@ artifact's `releaseType` follows the *selected SDK's own* metadata
 
 **Installing the extra SDK** — `bin/install-extra-sdk.sh` (bundled, not on
 PATH): extracts `sdk/default/{openharmony,hms,sdk-pkg.json}` from a Huawei
-commandline-tools zip, reads the SDK's `data.path` (e.g. `HarmonyOS-6.1.1`)
+commandline-tools zip (in the build matching **your** architecture — the SDK
+carries host binaries such as BiSheng clang and `hdc`, so the other arch's zip
+installs toolchains this machine cannot execute), reads the SDK's `data.path`
+(e.g. `HarmonyOS-6.1.1`)
 from `sdk-pkg.json` to name the destination directory, copies it under
 `/opt/devecostudio/sdk/<path>` with sudo, then calls
 `bin/patch-extra-sdk.sh`. The directory name comes from the zip, so the
@@ -571,7 +636,7 @@ re-apply them after an upgrade (it used to `exit 1` there, so the old
 │   ├── idea.properties
 │   └── fsnotifier
 ├── jbr/                        ← IDEA Linux JBR (+ Contents/Home/bin symlink)
-├── lib/                        ← DMG jars + native/linux-x86_64 + pty4j + jna + skiko
+├── lib/                        ← DMG jars + native/<linux-arch> + pty4j + jna + skiko
 ├── modules/
 ├── plugins/
 ├── sdk/                        ← CLI SDK (hdc at sdk/default/openharmony/toolchains/hdc)
@@ -636,25 +701,38 @@ standalone build.sh from PR #11 — no 700-line port, the PKGBUILD stays
 the single source of truth. **Rule: the PKGBUILD must only use the
 `msg2`/`error`/`warning` macros and the `srcdir`/`pkgdir`/`startdir`
 variables** — introducing another makepkg-only macro breaks standalone
-builds.
+builds. The same rule is why the *architecture* is read from `CARCH`
+(a plain variable makepkg also sets) and why every URL and checksum the
+script downloads comes from a PKGBUILD variable (`_idea_url`, `_idea_file`,
+`_py_url`, `_py_file`, `_sha_idea`, `_sha_python`) instead of being
+restated or parsed out of the file by line number.
+
+`--arch=x86_64|aarch64` sets `CARCH` before the PKGBUILD is sourced
+(default: `uname -m`), and a target that differs from the host is refused
+before anything is extracted.
 
 Two modes:
 
 - **Full build** (default): extracts the sources, downloads IDEA + CPython
-  (cached under `build/downloads/`, checksums read by position from the
-  PKGBUILD's `sha256sums` — #3 idea, #5 cpython), then runs
-  `prepare` + `package`. `--clean` forces re-extraction.
+  (cached under `build/downloads/`, verified against the PKGBUILD's
+  checksums), then runs `prepare` + `package`. `--clean` forces
+  re-extraction.
 - **`--stage=DIR`**: package an existing staging tree (e.g. makepkg's
   `pkg/`) without building. This is what the GitHub Actions workflow uses
   after `makepkg` — no duplicated build.
 
 Both modes always produce the distro-agnostic tarball
-(`devecostudio-<ver>-linux-x86_64.tar.gz`, `gzip -1` for speed — the same
+(`devecostudio-<ver>-linux-<arch>.tar.gz`, `gzip -1` for speed — the same
 compression the workflow uses), and optionally `.deb`/`.rpm` with **nfpm**
-(`--deb`/`--rpm`). `-h`/`--help` prints usage.
+(`--deb`/`--rpm`), named with the format's own arch spelling
+(`_deb_arch`/`_rpm_arch`, both derived from `CARCH`). `-h`/`--help` prints usage.
 
 What build.sh does beyond makepkg:
 
+- Finds the user-supplied Huawei zips: the fixed `makepkg` name first, then
+  Huawei's own versioned filename (`devecostudio-mac*.zip`,
+  `commandline-tools-linux-<x64|arm64>*.zip` — the arch part is what the
+  chosen `CARCH` needs).
 - Extracts the sources itself (bsdtar/unzip for zips — 7z would drop the
   SDK symlinks — and tar for the IDEA/CPython tarballs).
 - Copies `devecostudio.desktop` into `$srcdir` (makepkg does that for
@@ -673,6 +751,13 @@ Pitfalls learned:
 - nfpm 2.47 does **not** expand `{{ .Env.X }}` templates in the config
   (version ends up literal in metadata) — `build.sh` pre-renders with
   `envsubst` (`version: "${PKGVER}"`), which requires gettext.
+- `.deb` and `.rpm` spell the same architecture differently (`arm64` vs
+  `aarch64`), and nfpm has one `arch:` field, so the config is rendered
+  **once per format** with `PKG_ARCH` set to that format's spelling.
+- The staging tree is templated too (`STAGE`, an absolute path): `nfpm.yaml`
+  used to hardcode makepkg's `pkg/devecostudio`, which only existed in
+  `--stage` mode — a full `./build.sh --rpm` pointed at a non-existent
+  directory.
 - The staging tree from build.sh differs from makepkg's only by the SDK's
   static libraries (`*.a`): makepkg's fakeroot tidy removes 177 of them
   (SDK BiSheng `libc++.a` etc.), build.sh keeps them. No functional impact
@@ -690,26 +775,40 @@ the nfpm rpm packager builds the whole cpio payload in memory and peaks at
   (`/ci.swap`; `fallocate` — the kernel rejects *sparse* swap files with
   "contains holes"); the host has 15 GB RAM, so the build has ~29 GB.
   Verified: a `docker run` container inherits the host's swap.
-- the actual build runs inside `docker run --rm -v $GITHUB_WORKSPACE:/work
-  archlinux:base-devel`: `makepkg -sf` (**no `-c`** — `--clean` removes
-  `pkg/`, which the packaging step needs) as a non-root `builder` user,
-  then `/work/build.sh --stage=pkg/devecostudio --deb --rpm` (tarball +
-  nfpm deb/rpm from the same tree). nfpm is not in the Arch repos, so it
-  is downloaded from the GitHub release (`nfpm_2.47.0_Linux_x86_64.tar.gz`,
-  version pinned — update deliberately).
+- `target_arch` picks the runner and the build path. `x86_64` keeps the
+  Arch container: `docker run --rm -v $GITHUB_WORKSPACE:/work archlinux:base-devel`,
+  `makepkg -sf` (**no `-c`** — `--clean` removes `pkg/`, which the packaging
+  step needs) as a non-root `builder` user, then `/work/build.sh
+  --stage=pkg/devecostudio --deb --rpm` (tarball + nfpm deb/rpm from the same
+  tree).
+- `aarch64` runs on `ubuntu-24.04-arm`, where there is no makepkg (and no
+  official Arch arm64 container image): the dependencies are installed with
+  apt (`jq python3 p7zip-full libarchive-tools unzip binutils gettext-base`)
+  and `./build.sh --arch=aarch64 --deb --rpm` builds the tree itself. No Arch
+  package is produced for aarch64 — Arch Linux ARM users run `makepkg -si`.
+- nfpm is not in the Arch repos or Ubuntu either; the static binary is
+  downloaded from the GitHub release (`nfpm_2.47.0_Linux_{x86_64,arm64}.tar.gz`
+  matching the runner, version pinned — update deliberately).
+- The checksum overrides are plain environment variables (`MAC_ZIP_SHA256`,
+  `CLI_ZIP_SHA256`), which the PKGBUILD prefers over its pinned values. They
+  are exported to the job and passed into the container with `docker run -e`.
+  (Previously the workflow `sed`-ed the `sha256sums` array by line number —
+  fragile, and wrong as soon as the array became arch-conditional.)
 
 Artifacts are uploaded **separately** (not one giant bundle) so users
-only download what they need; each is ~3–4 GB:
+only download what they need, with the target architecture in the name;
+each is ~3–4 GB:
 
-- `devecostudio-arch` — `.pkg.tar.zst`
-- `devecostudio-deb` — `.deb`
-- `devecostudio-rpm` — `.rpm`
-- `devecostudio-tarball` — `.tar.gz`
+- `devecostudio-arch-x86_64` — `.pkg.tar.zst`
+- `devecostudio-deb-<arch>` — `.deb`
+- `devecostudio-rpm-<arch>` — `.rpm`
+- `devecostudio-tarball-<arch>` — `.tar.gz`
 
 ### New DevEco Studio release
 
 1. Get the new `devecostudio-mac-<v>.zip` + `commandline-tools-linux-x64-<v>.zip`
-   from Huawei (signed, expiring links).
+   **and** `commandline-tools-linux-arm64-<v>.zip` from Huawei (signed,
+   expiring links). The Mac zip may be either the x64 or the ARM build.
 2. **Analyze the actual layouts first** (rule: never trust paths inherited
    from the previous release): `7z l`/`7z x` the DMG, diff `lib/`,
    `plugins/`, `tools/`, and read the new `Resources/product-info.json`
@@ -717,15 +816,22 @@ only download what they need; each is ~3–4 GB:
    things between versions — e.g. 26.0.0 flattened all jars into `lib/`
    and removed `lib/modules` + `lib/cds`, and added
    `lib/skiko-awt-runtime-all` and `tools/dumpParser` (Mach-O, excluded).
-3. Update `pkgver`, `_ideaver`, and the two Huawei zip `sha256sums`.
-   Also confirm the four patch patterns still match — hvigor
+   Diff the **arm64** CLI zip against the x64 one as well: 26.0.0.851's
+   arm64 build already differs by shipping no Previewer binary.
+3. Update `pkgver`, `_ideaver`, and **both** branches of the `CARCH` case
+   block: the two Huawei zip checksums per architecture, plus the IDEA and
+   CPython checksums of the aarch64 archives when `_ideaver` moves (JetBrains
+   publishes `idea-<ver>-aarch64.tar.gz` with a `.sha256` sidecar;
+   python-build-standalone has no per-file checksum asset, so hash the
+   download once).
+4. Confirm the four patch patterns still match — hvigor
    `validate-util.js`, hvigor `hmos-sdk-loader.js`, the
    `hos-project-mgmt-*.jar` byte sequence (via
    `bin/patch-extra-sdk.sh`) and the previewer driver (via
    `scripts/patch-previewer.py`). All of them warn rather than fail, so
    read the build output: a silent "pattern not found" means the older-SDK
    or fail-fast behaviour is gone.
-4. `makepkg -f`, install, and run the test checklist below.
+5. `makepkg -f` on each architecture, install, and run the test checklist below.
 
 ### Test checklist (after build)
 
