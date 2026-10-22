@@ -12,7 +12,3 @@ fi
 if [ -x /opt/devecostudio/bin/patch-extra-sdk.sh ]; then
   /opt/devecostudio/bin/patch-extra-sdk.sh --auto || true
 fi
-
-if [ ! -e /usr/lib64/libbz2.so.1.0 ] && [ -e /usr/lib64/libbz2.so.1 ]; then                                                                                                                                                  
-  ln -sf /usr/lib64/libbz2.so.1 /opt/devecostudio/tools/emulator/libbz2.so.1.0                                                                                                                                               
-fi  

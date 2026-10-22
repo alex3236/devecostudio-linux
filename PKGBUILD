@@ -51,11 +51,12 @@ depends=(
   'libxcrypt-compat'
   'freetype2'
   'libpulse'  # Emulator links system libpulse.so.0
+  'bzip2'     # Emulator links libbz2.so.1 (retargeted in package(), see below)
 )
 optdepends=(
   'fcitx5: Chinese input method support for JBR JCEF'
 )
-makedepends=('jq' 'p7zip' 'python')
+makedepends=('jq' 'p7zip' 'python' 'patchelf')
 options=('!strip')
 source=(
   "devecostudio-mac.zip"
@@ -169,6 +170,16 @@ package() {
   # hardcodes the "Emulator.exe" name. Symlink it to the real binary so
   # Device Manager and debugging work on Linux.
   ln -sf Emulator "$_pkg/tools/emulator/Emulator.exe"
+  # The emulator and its libavformat.so ask for the Debian bzip2 soname
+  # libbz2.so.1.0; Fedora/RHEL/openEuler ship libbz2.so.1 only, so the
+  # emulator dies there and the IDE's device list stays empty. libbz2.so.1
+  # exists on Debian, Fedora and Arch alike, so retarget it at build time —
+  # an install hook could not cover the tarball. See DETAILS.md.
+  for _e in Emulator libavformat.so; do
+    patchelf --replace-needed libbz2.so.1.0 libbz2.so.1 "$_pkg/tools/emulator/$_e"
+    patchelf --print-needed "$_pkg/tools/emulator/$_e" | grep -qx 'libbz2\.so\.1' \
+      || { error "patchelf did not retarget libbz2 in $_e"; exit 1; }
+  done
   cp -a "$_cli/tool/node/" "$_pkg/tools/node/"
   # node symlinks (IDE expects node/npm/npx/corepack alongside bin/)
   (cd "$_pkg/tools/node" && ln -sf bin/* .)

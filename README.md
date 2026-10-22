@@ -68,7 +68,7 @@ To update checksums to match your local files:
 
 You will need these dependencies:
 
-    bsdtar or unzip, jq, python3, curl, binutils
+    bsdtar or unzip, jq, python3, curl, binutils, patchelf
 
 To also build .deb/.rpm packages:
 
@@ -149,9 +149,9 @@ Extract the tarball and set up the launcher manually:
 
 You also need the runtime dependencies (package names vary by distro):
 `libxss`, `libxtst`, `nss`, `alsa-lib`, `libxcrypt-compat`, `freetype2`,
-`libpulse`. Chinese input support needs `fcitx5`. Unlike the Arch package,
-the bundled CLI tools are not linked into `/usr/bin` — call them by full
-path under `/opt/devecostudio/tools/bin/`.
+`libpulse`, `bzip2`. Chinese input support needs `fcitx5`. Unlike the Arch
+package, the bundled CLI tools are not linked into `/usr/bin` — call them
+by full path under `/opt/devecostudio/tools/bin/`.
 
 </td></tr></thead></table>
 </details>

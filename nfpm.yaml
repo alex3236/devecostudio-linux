@@ -24,6 +24,7 @@ overrides:
       - libcrypt1
       - libfreetype6
       - libpulse0
+      - libbz2-1.0
     recommends:
       - fcitx5
   rpm:
@@ -35,6 +36,7 @@ overrides:
       - libxcrypt-compat
       - freetype
       - pulseaudio-libs
+      - bzip2-libs
     recommends:
       - fcitx5
 

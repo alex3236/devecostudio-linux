@@ -68,7 +68,7 @@
 
 你将需要以下依赖：
 
-    bsdtar 或 unzip, jq, python3, curl, binutils
+    bsdtar 或 unzip, jq, python3, curl, binutils, patchelf
 
 如你需要构建 .deb/.rpm，则额外需要：
 
@@ -145,7 +145,7 @@ tarball 适用于任何 Linux。
     sudo ln -s /opt/devecostudio/bin/devecostudio.sh /usr/local/bin/devecostudio
     sudo desktop-file-install /opt/devecostudio.desktop
 
-还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`。中文输入支持需要 `fcitx5`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
+还需要安装运行时依赖（包名因发行版而异）：`libxss`、`libxtst`、`nss`、`alsa-lib`、`libxcrypt-compat`、`freetype2`、`libpulse`、`bzip2`。中文输入支持需要 `fcitx5`。与 Arch 包不同，内置 CLI 工具不会链接到 `/usr/bin`——请用完整路径调用 `/opt/devecostudio/tools/bin/` 下的工具。
 
 </td></tr></thead></table>
 </details>

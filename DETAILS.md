@@ -40,6 +40,33 @@ Two consequences of the symlink:
 - The `.exe` cleanup pass must keep it: `find "$_pkg" -name '*.exe' -not -name 'Emulator.exe' -delete`. (A past bug deleted it; it only existed locally because it had been created by hand.)
 - The emulator binary itself comes from the **CLI** zip (Linux ELF), not the Mac DMG (Mach-O).
 
+### Emulator bzip2 soname (`libbz2.so.1.0` -> `libbz2.so.1`)
+
+The emulator binary and its bundled `libavformat.so` were linked against the
+Debian-style bzip2 soname `libbz2.so.1.0`. Fedora, RHEL and openEuler ship
+`bzip2-libs` whose soname is `libbz2.so.1`, so there the emulator dies with
+`error while loading shared libraries: libbz2.so.1.0` — and because the IDE
+queries the emulator every second for the device list and the Device Manager,
+the device list stays empty instead of showing an error.
+
+`libbz2.so.1` exists on Debian (`libbz2-1.0`), Fedora (`bzip2-libs`) and Arch
+(`bzip2`) alike, so `package()` retargets both objects with
+`patchelf --replace-needed libbz2.so.1.0 libbz2.so.1` and then asserts the new
+name with `patchelf --print-needed`. The retarget is done at build time rather
+than by an install hook for two reasons: the distro-agnostic tarball has no
+install hooks at all, and a symlink created inside `/opt/devecostudio` by a
+postinstall script is unowned by the package and would also run on removal
+(the same script is wired to both `postinstall` and `postremove` in
+`nfpm.yaml`). `patchelf` is therefore a build dependency, and `bzip2` is a
+runtime dependency of the Arch package (the deb/rpm equivalents are
+`libbz2-1.0` / `bzip2-libs` in `nfpm.yaml`).
+
+Unrelated but adjacent fragility: the package ships `libavformat.so` without a
+versioned name while its SONAME is `libavformat.so.61`, so `libavdevice.so` and
+`libavfilter.so` can only resolve it from the host's ffmpeg. The normal emulator
+start path does not load them, but a host whose ffmpeg major differs would
+break the media pipeline.
+
 ### Emulator system images
 
 The IDE's "install emulator" wizard only appears when the emulator binary

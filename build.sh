@@ -141,6 +141,8 @@ else
   export pkgdir="$PWD/build/pkg"
   export startdir="$PWD"
   rm -rf "$pkgdir"
+  command -v patchelf >/dev/null 2>&1 \
+    || error "patchelf is required (the PKGBUILD retargets the emulator's libbz2 soname)"
   _msg "Running PKGBUILD prepare()/package()..."
   # shellcheck source=PKGBUILD
   source PKGBUILD
