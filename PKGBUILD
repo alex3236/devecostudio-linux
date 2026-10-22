@@ -36,6 +36,7 @@ _shared_scripts=(
   'emulator-wrapper-patch.sh'
   'python3-wrapper'
   'append.vmoptions'
+  'patch-emulator-list.py' 
 )
 # Re-applies the extra-SDK patches after an install/upgrade (an upgrade
 # restores the pristine hvigor/IDE files); a no-op without an extra SDK.
@@ -129,7 +130,7 @@ package() {
   local _idea=$(find "$srcdir" -mindepth 1 -maxdepth 1 -type d -name 'idea-IU-*' | head -1)
   local _cli="$srcdir/command-line-tools"
   local _pkg="$pkgdir/opt/devecostudio"
-  local _scripts=(devecostudio.sh install-extra-sdk.sh patch-extra-sdk.sh patch-previewer.py emulator-wrapper-patch.sh python3-wrapper append.vmoptions)
+  local _scripts=(devecostudio.sh install-extra-sdk.sh patch-extra-sdk.sh patch-previewer.py emulator-wrapper-patch.sh python3-wrapper append.vmoptions patch-emulator-list.py)
   for _s in "${_scripts[@]}"; do
     if [[ ! -f "$startdir/scripts/$_s" ]]; then
       error "missing shared script: scripts/$_s (edit/commit scripts/ and rebuild)"
@@ -363,6 +364,7 @@ package() {
   find "$_pkg" -type f -exec chmod 644 {} +
   # Restore executability for all ELF binaries and shebang scripts.
   # Use Python (not `file`) to avoid crashes on the huge file tree.
+  python3 "$startdir/scripts/patch-emulator-list.py" "$_pkg"
   python3 - "$_pkg" << 'PYEOF'
 import os, sys
 root = sys.argv[1]
