@@ -231,7 +231,10 @@ package() {
   # The success path is left untouched.
   python3 "$startdir/scripts/patch-previewer.py" \
     "$_pkg/tools/hvigor/hvigor-ohos-plugin/node_modules/@ohos/coverage/lib/src/commandLine/localTest/previewer.js"
-
+  # Force change osType to Windows to read the cloud emulator list
+  msg2 "Patching OsTypeUtil for emulator cloud image discovery..."
+  python3 "$startdir/scripts/patch-emulator-list.py" "$_pkg" 
+  
   msg2 "Transforming vmoptions (macOS → Linux)..."
   sed \
     -e 's/-Dsun.java2d.metal=true/-Dsun.java2d.opengl=true/' \
@@ -364,7 +367,6 @@ package() {
   find "$_pkg" -type f -exec chmod 644 {} +
   # Restore executability for all ELF binaries and shebang scripts.
   # Use Python (not `file`) to avoid crashes on the huge file tree.
-  python3 "$startdir/scripts/patch-emulator-list.py" "$_pkg"
   python3 - "$_pkg" << 'PYEOF'
 import os, sys
 root = sys.argv[1]
